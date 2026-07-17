@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Theme 1: Light Tech (Default) */
+  --color-page: 241 245 249;   /* slate-100 */
+  --color-panel: 255 255 255;  /* white */
+  --color-card: 248 250 252;   /* slate-50 */
+  --color-divider: 241 245 249;/* slate-100 */
+  --color-base: 226 232 240;   /* slate-200 */
+  
+  --color-primary: 30 41 59;   /* slate-800 */
+  --color-secondary: 51 65 85; /* slate-700 */
+  --color-tertiary: 71 85 105; /* slate-600 */
+  --color-muted: 100 116 139;  /* slate-500 */
+  --color-disabled: 148 163 184;/* slate-400 */
+  
+  --color-accent-50: 240 249 255;  /* sky-50 */
+  --color-accent-100: 224 242 254; /* sky-100 */
+  --color-accent-200: 186 230 253; /* sky-200 */
+  --color-accent-300: 125 211 252; /* sky-300 */
+  --color-accent-400: 56 189 248;  /* sky-400 */
+  --color-accent-500: 14 165 233;  /* sky-500 */
+  --color-accent-600: 2 132 199;   /* sky-600 */
+  
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  /* Theme 2: Dark Console */
+  --color-page: 15 23 42;      /* slate-900 */
+  --color-panel: 30 41 59;     /* slate-800 */
+  --color-card: 51 65 85;      /* slate-700 */
+  --color-divider: 51 65 85;   /* slate-700 */
+  --color-base: 71 85 105;     /* slate-600 */
+  
+  --color-primary: 248 250 252;   /* slate-50 */
+  --color-secondary: 226 232 240; /* slate-200 */
+  --color-tertiary: 203 213 225;  /* slate-300 */
+  --color-muted: 148 163 184;     /* slate-400 */
+  --color-disabled: 100 116 139;  /* slate-500 */
+  
+  --color-accent-50: 8 47 73;     /* sky-950 */
+  --color-accent-100: 12 74 110;  /* sky-900 */
+  --color-accent-200: 7 89 133;   /* sky-800 */
+  --color-accent-300: 14 165 233; /* sky-500 */
+  --color-accent-400: 56 189 248; /* sky-400 */
+  --color-accent-500: 56 189 248; /* sky-400 */
+  --color-accent-600: 125 211 252;/* sky-300 */
+  
+  color-scheme: dark;
+}
+
+[data-theme="warm"] {
+  /* Theme 3: Low Contrast Warm */
+  --color-page: 245 245 244;   /* stone-100 */
+  --color-panel: 250 250 249;  /* stone-50 */
+  --color-card: 245 245 244;   /* stone-100 */
+  --color-divider: 231 229 228;/* stone-200 */
+  --color-base: 231 229 228;   /* stone-200 */
+  
+  --color-primary: 41 37 36;   /* stone-800 */
+  --color-secondary: 68 64 60; /* stone-700 */
+  --color-tertiary: 87 83 78;  /* stone-600 */
+  --color-muted: 120 113 108;  /* stone-500 */
+  --color-disabled: 168 162 158;/* stone-400 */
+  
+  --color-accent-50: 255 251 235;  /* amber-50 */
+  --color-accent-100: 254 243 199; /* amber-100 */
+  --color-accent-200: 253 230 138; /* amber-200 */
+  --color-accent-300: 252 211 77;  /* amber-300 */
+  --color-accent-400: 251 191 36;  /* amber-400 */
+  --color-accent-500: 245 158 11;  /* amber-500 */
+  --color-accent-600: 217 119 6;   /* amber-600 */
+  
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: rgb(var(--color-page));
+  color: rgb(var(--color-primary));
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(var(--color-accent-400) / 0.24);
+  color: rgb(var(--color-primary));
+}
