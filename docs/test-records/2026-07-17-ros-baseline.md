@@ -63,3 +63,20 @@ bash /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/scripts/start_navigat
 - `/navigate_to_pose` 只有 Action Server，没有执行中的目标。
 
 因此当前状态是“导航栈就绪、车辆未运动”。真正发送目标点前，必须切换到地面安全区域，确认急停和人工接管有效，并先做低速短距离测试。
+
+## 首个低速导航目标
+
+场地确认安全后，按 AMCL 当前朝向发送了一个约 0.25 m 的短距离目标：
+
+```text
+frame: map
+goal: x=-0.052, y=0.280, yaw≈1.72 rad
+```
+
+- Nav2 Action：`/navigate_to_pose`
+- 结果：`SUCCEEDED`
+- 最终 AMCL 位姿约为 `(-0.093, 0.171)`，落在目标容差内；
+- 目标结束后 `/cmd_vel_nav` 无持续输出；
+- `/odom` 线速度和角速度均为 `0.0`。
+
+这只证明了“单目标、短距离、低速”链路可工作；还不能代表巡查路线、连续定位和障碍物避让已经验收。
