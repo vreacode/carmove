@@ -18,6 +18,8 @@
 
 本次没有启动导航，也没有发布 `/cmd_vel_nav` 速度指令。没有启动额外的 Yesense 驱动，避免与官方底盘提供的 `/imu/data_raw` 争用串口。
 
+随后停止 SLAM，使用同一份硬件链路启动 Nav2 节点预检；预检阶段仍未发送导航目标。
+
 ## 验收结果
 
 健康检查命令：
@@ -34,7 +36,7 @@ CAMERA_RTSP_URL=rtsp://10.16.16.10:8554/video1 bash tools/ros_healthcheck.sh
 - `/imu/data_raw`、`/imu/data`：通过，滤波 IMU 约 20.0 Hz
 - `/scan`、`/map`：通过
 - `/tf`、`/tf_static`：通过
-- `/cmd_vel_nav`：无发布者、1 个底盘订阅者，保持安全锁定状态
+- `/cmd_vel_nav`：在 SLAM 健康检查阶段无发布者、1 个底盘订阅者；Nav2 预检阶段建立了控制器发布端，但未产生速度消息
 - RTSP：通过，1920×1080，HEVC
 - 资源：内存约 3.9/7.6 GiB 可用，温度约 50.6°C
 - Agent `GET /health`：通过
@@ -43,3 +45,21 @@ CAMERA_RTSP_URL=rtsp://10.16.16.10:8554/video1 bash tools/ros_healthcheck.sh
 ## 注意事项
 
 SLAM 启动日志出现过一次队列丢帧提示和激光最小距离配置提示；本次健康检查中点云和 IMU 频率稳定，暂不作为阻塞问题。下一次应在安全封闭场地低速移动，验证地图是否连续、定位是否稳定，再进入 Nav2。
+
+## Nav2 节点预检
+
+在停止 SLAM、改由 Nav2 的 `map_server` 发布 `gmap_map` 后启动：
+
+```bash
+bash /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/scripts/start_navigation_integrated.sh gmap_map
+```
+
+结果：
+
+- `map_server`、`amcl`、`controller_server`、`planner_server`、`bt_navigator`、局部/全局 costmap 均为 `active [3]`；
+- `/map` 由 `map_server` 单独发布，避免与 SLAM 同时发布；
+- `/amcl_pose` 已有位姿输出，初始位姿约为 `(0.0025, 0.0000)`；
+- `/cmd_vel_nav` 已建立控制器发布端，但本次没有发送导航目标，采样期间没有速度消息；
+- `/navigate_to_pose` 只有 Action Server，没有执行中的目标。
+
+因此当前状态是“导航栈就绪、车辆未运动”。真正发送目标点前，必须切换到地面安全区域，确认急停和人工接管有效，并先做低速短距离测试。
