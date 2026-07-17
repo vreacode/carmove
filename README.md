@@ -6,6 +6,8 @@
 - apps/video-recorder：独立的视频/激光雷达录制服务源码；
 - ros2/：纳入仓库的 FAST-LIO2、激光雷达/IMU 驱动源码和少量车辆适配包；
 - deployment/：板上启动脚本和部署说明；
+- tools/：只读 ROS 健康检查和 RTSP 数据采集工具；
+- datasets/：垃圾/违停数据集类别定义与本地采集规范；
 - docs/：系统盘点、当前状态、设备调试方法和按产品说明书整理的推进路线。
 
 ## 当前状态
@@ -18,6 +20,7 @@
 4. 将每次联调结果沉淀为测试记录和版本提交。
 
 完整盘点见 docs/00-system-inventory.md，后续路线见 docs/02-roadmap-from-spec.md。
+当前 Sprint 见 docs/05-first-sprint.md。
 
 ## 安全与仓库边界
 
