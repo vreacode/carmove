@@ -11,6 +11,14 @@
     cd /home/nvidia/carmove
     bash tools/ros_healthcheck.sh
 
+启动底盘前先执行只读启动前检查：
+
+    bash tools/base_preflight.sh
+
+该检查不会启动 ROS、打开串口或发布速度指令。当前确认的官方底盘入口是
+`/home/nvidia/Desktop/wheeltec_ros2/start_base.sh`，串口配置为
+`/dev/ttyCH343USB0`，速度话题为 `/cmd_vel_nav`。
+
 需要重点观察：
 
 - /wheeltec_robot 是否存在；
@@ -28,7 +36,12 @@
 
     cd /home/nvidia/carmove
     source /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/.venv/bin/activate
-    python tools/collect_rtsp_frames.py +      --source rtsp://设备相机地址 +      --output datasets/local/roadside_v1/images/raw_day_01 +      --interval 1.0 +      --scene gate_a_day +      --note "固定路线，白天，采集垃圾和车辆"
+    python tools/collect_rtsp_frames.py \
+      --source rtsp://设备相机地址 \
+      --output datasets/local/roadside_v1/images/raw_day_01 \
+      --interval 1.0 \
+      --scene gate_a_day \
+      --note "固定路线，白天，采集垃圾和车辆"
 
 采集结束后，人工筛选图片并分别放入 train/val，再用 CVAT、LabelImg 或 Roboflow 按 datasets/README.md 的格式标注。
 
