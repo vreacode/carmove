@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -18,7 +19,7 @@ from .motion import MotionControlManager
 from .pose import RobotPoseManager
 from .runtime import BaseBringupManager, CommandRunner, DevScreenRecordingManager, MapManager, MediaManager, ModelProcessManager, StatusCollector
 from .sensors import SensorBridgeManager
-from .schemas import ControlRequest, LoginlessAck, MediaRecordingStartRequest, MediaSnapshotRequest, ModelStartRequest, MotionArmRequest, MotionModeRequest, MotionOverrideRequest, PresetRequest, WebRTCOffer
+from .schemas import ControlRequest, GimbalPulseRequest, LoginlessAck, MediaRecordingStartRequest, MediaSnapshotRequest, ModelStartRequest, MotionArmRequest, MotionModeRequest, MotionOverrideRequest, PresetRequest, WebRTCOffer
 from .webrtc import WebRTCManager
 
 settings = AgentSettings()
@@ -34,6 +35,7 @@ media_manager = MediaManager(settings, log_buffer)
 dev_screen_recording_manager = DevScreenRecordingManager(settings, log_buffer)
 status_collector = StatusCollector(settings, model_manager, base_manager, sensor_manager, pose_manager, motion_manager)
 webrtc_manager = WebRTCManager(settings, log_buffer)
+siyi_gimbal_lock = asyncio.Lock()
 
 
 def verify_token(authorization: str | None = Header(default=None)) -> None:
@@ -80,6 +82,7 @@ async def camera_status() -> dict:
     if not settings.siyi_zt6_enabled:
         return {
             "enabled": False,
+            "motion_enabled": False,
             "connected": False,
             "target": f"{settings.siyi_zt6_host}:{settings.siyi_zt6_port}",
             "error": "SIYI ZT6 status polling is disabled",
@@ -102,7 +105,82 @@ async def camera_status() -> dict:
             "target": f"{settings.siyi_zt6_host}:{settings.siyi_zt6_port}",
             "error": str(exc),
         }
-    return {"enabled": True, "connected": True, "error": None, **snapshot}
+    return {
+        "enabled": True,
+        "motion_enabled": settings.siyi_zt6_motion_enabled,
+        "connected": True,
+        "error": None,
+        **snapshot,
+    }
+
+
+@app.post("/camera/gimbal/pulse", dependencies=[Depends(verify_token)])
+async def camera_gimbal_pulse(request: GimbalPulseRequest) -> dict:
+    """Run one bounded gimbal pulse and always issue a zero-speed stop."""
+
+    if not settings.siyi_zt6_motion_enabled:
+        raise HTTPException(status_code=409, detail="SIYI ZT6 motion control is disabled")
+    if max(abs(request.yaw_speed), abs(request.pitch_speed)) > settings.siyi_zt6_motion_max_speed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"gimbal speed exceeds configured limit {settings.siyi_zt6_motion_max_speed}",
+        )
+    if request.duration_ms > settings.siyi_zt6_motion_max_duration_ms:
+        raise HTTPException(
+            status_code=400,
+            detail=f"gimbal duration exceeds configured limit {settings.siyi_zt6_motion_max_duration_ms} ms",
+        )
+    if request.yaw_speed == 0 and request.pitch_speed == 0:
+        raise HTTPException(status_code=400, detail="gimbal pulse must include a non-zero speed")
+
+    def pulse() -> dict:
+        client = SiyiZt6Client(
+            settings.siyi_zt6_host,
+            settings.siyi_zt6_port,
+            settings.siyi_zt6_query_timeout_seconds,
+        )
+        turn_ack = False
+        stop_ack = False
+        try:
+            turn_ack = client.turn(request.yaw_speed, request.pitch_speed)
+            if turn_ack:
+                time.sleep(request.duration_ms / 1000.0)
+        finally:
+            stop_ack = client.stop()
+        return {
+            "ok": turn_ack and stop_ack,
+            "turn_ack": turn_ack,
+            "stop_ack": stop_ack,
+            "yaw_speed": request.yaw_speed,
+            "pitch_speed": request.pitch_speed,
+            "duration_ms": request.duration_ms,
+        }
+
+    async with siyi_gimbal_lock:
+        try:
+            return await asyncio.to_thread(pulse)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"ZT6 gimbal command failed: {exc}") from exc
+
+
+@app.post("/camera/gimbal/stop", dependencies=[Depends(verify_token)])
+async def camera_gimbal_stop() -> dict:
+    """Issue a zero-speed stop; allowed even when motion pulses are disabled."""
+
+    def stop() -> bool:
+        client = SiyiZt6Client(
+            settings.siyi_zt6_host,
+            settings.siyi_zt6_port,
+            settings.siyi_zt6_query_timeout_seconds,
+        )
+        return client.stop()
+
+    async with siyi_gimbal_lock:
+        try:
+            ack = await asyncio.to_thread(stop)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"ZT6 gimbal stop failed: {exc}") from exc
+    return {"ok": ack, "stop_ack": ack}
 
 
 @app.get("/models", dependencies=[Depends(verify_token)])

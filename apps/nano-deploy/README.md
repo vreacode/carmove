@@ -98,6 +98,8 @@ At this stage, the frontend intentionally does **not** try to replace RViz for f
 - `POST /api/auth/login`
 - `GET /api/system/status`
 - `GET /api/camera/status`
+- `POST /api/camera/gimbal/pulse`
+- `POST /api/camera/gimbal/stop`
 - `POST /api/model/start`
 - `POST /api/model/stop`
 - `POST /api/model/restart`
@@ -119,6 +121,8 @@ At this stage, the frontend intentionally does **not** try to replace RViz for f
 - `GET /health`
 - `GET /status`
 - `GET /camera/status`
+- `POST /camera/gimbal/pulse`
+- `POST /camera/gimbal/stop`
 - `GET /models`
 - `POST /model/start`
 - `POST /model/stop`

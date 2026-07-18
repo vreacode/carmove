@@ -35,6 +35,9 @@ python3 tools/siyi_zt6_status.py \\
 板端 Agent 提供只读接口 `GET /camera/status`，服务端代理为
 `GET /api/camera/status`；Dashboard 每 5 秒读取一次并显示链路、模式、录像状态和 Yaw/Pitch。该接口通过线程执行网络查询，不阻塞 Agent 的异步事件循环。
 
+Agent 还提供了受保护的 `POST /camera/gimbal/pulse` 和
+`POST /camera/gimbal/stop`。脉冲控制默认关闭（`SIYI_ZT6_MOTION_ENABLED=false`），并限制速度与持续时间；开启后 Dashboard 仅显示 `Yaw+ / Yaw− / Pitch+ / Pitch−` 协议方向按钮，直到完成现场方向确认。
+
 手册规定的 UART 参数为 `115200 8N1`；SDK 数据帧以 `55 66` 开始，CRC16 使用多项式 `0x1021`、初值 `0`、无最终异或。
 
 协议库目前提供了受限的 `turn(yaw_speed, pitch_speed)` 和 `stop()` 方法，速度范围固定为 `-100..100`。Dashboard 仍只显示状态，不调用运动方法。

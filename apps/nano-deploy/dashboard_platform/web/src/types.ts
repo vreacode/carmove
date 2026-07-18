@@ -57,6 +57,7 @@ export type BaseStatus = {
 
 export type SiyiCameraStatus = {
   enabled: boolean;
+  motion_enabled?: boolean;
   connected: boolean;
   target?: string;
   hardware_id?: string | null;

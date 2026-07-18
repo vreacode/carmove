@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, W
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .config import ServerSettings
 from .hub import AgentBridge, BroadcastHub
@@ -40,6 +40,12 @@ class ModelStartRequest(BaseModel):
 class ControlRequest(BaseModel):
     command: str
     speed: str = "medium"
+
+
+class GimbalPulseRequest(BaseModel):
+    yaw_speed: int = Field(default=0, ge=-100, le=100)
+    pitch_speed: int = Field(default=0, ge=-100, le=100)
+    duration_ms: int = Field(default=250, ge=50, le=1000)
 
 
 class MotionArmRequest(BaseModel):
@@ -133,6 +139,16 @@ async def system_status(_: str = Depends(require_token)) -> dict:
 @app.get("/api/camera/status")
 async def api_camera_status(_: str = Depends(require_token)) -> dict:
     return await bridge.fetch_json("GET", "/camera/status")
+
+
+@app.post("/api/camera/gimbal/pulse")
+async def api_camera_gimbal_pulse(payload: GimbalPulseRequest, _: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("POST", "/camera/gimbal/pulse", json=payload.model_dump())
+
+
+@app.post("/api/camera/gimbal/stop")
+async def api_camera_gimbal_stop(_: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("POST", "/camera/gimbal/stop")
 
 
 @app.post("/api/model/start")

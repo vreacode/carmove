@@ -35,6 +35,12 @@ class ControlRequest(BaseModel):
     speed: Literal["low", "medium", "high"] = "medium"
 
 
+class GimbalPulseRequest(BaseModel):
+    yaw_speed: int = Field(default=0, ge=-100, le=100)
+    pitch_speed: int = Field(default=0, ge=-100, le=100)
+    duration_ms: int = Field(default=250, ge=50, le=1000)
+
+
 class MotionArmRequest(BaseModel):
     armed: bool
 

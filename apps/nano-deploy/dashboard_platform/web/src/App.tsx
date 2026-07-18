@@ -63,6 +63,7 @@ function App() {
   const [token, setToken] = useState(loadToken());
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
+  const [gimbalPending, setGimbalPending] = useState(false);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("helmet");
   const [source, setSource] = useState("");
@@ -397,6 +398,33 @@ function App() {
       setError(describeError(err));
     } finally {
       setControlPending(false);
+    }
+  }
+
+  async function pulseGimbal(yawSpeed: number, pitchSpeed: number) {
+    try {
+      setGimbalPending(true);
+      setError("");
+      await apiFetch("/api/camera/gimbal/pulse", token, {
+        method: "POST",
+        body: JSON.stringify({ yaw_speed: yawSpeed, pitch_speed: pitchSpeed, duration_ms: 250 }),
+      });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setGimbalPending(false);
+    }
+  }
+
+  async function stopGimbal() {
+    try {
+      setGimbalPending(true);
+      setError("");
+      await apiFetch("/api/camera/gimbal/stop", token, { method: "POST" });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setGimbalPending(false);
     }
   }
 
@@ -946,6 +974,50 @@ function App() {
               <p className="mt-3 truncate text-xs text-muted" title={cameraStatus?.hardware_id || undefined}>
                 ID: {cameraStatus?.hardware_id || cameraStatus?.error || "--"}
               </p>
+              <div className="mt-3 border-t border-divider pt-3">
+                <p className="mb-2 text-xs text-muted">协议方向控制（默认关闭）</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div />
+                  <button
+                    className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!cameraStatus?.motion_enabled || gimbalPending}
+                    onClick={() => void pulseGimbal(0, 10)}
+                  >
+                    Pitch+
+                  </button>
+                  <div />
+                  <button
+                    className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!cameraStatus?.motion_enabled || gimbalPending}
+                    onClick={() => void pulseGimbal(-10, 0)}
+                  >
+                    Yaw−
+                  </button>
+                  <button
+                    className="rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={gimbalPending}
+                    onClick={() => void stopGimbal()}
+                  >
+                    Stop
+                  </button>
+                  <button
+                    className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!cameraStatus?.motion_enabled || gimbalPending}
+                    onClick={() => void pulseGimbal(10, 0)}
+                  >
+                    Yaw+
+                  </button>
+                  <div />
+                  <button
+                    className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!cameraStatus?.motion_enabled || gimbalPending}
+                    onClick={() => void pulseGimbal(0, -10)}
+                  >
+                    Pitch−
+                  </button>
+                  <div />
+                </div>
+              </div>
             </div>
           </div>
           {status?.base_status?.last_error ? <p className="mt-3 text-sm text-amber-600">底盘提示：{status.base_status.last_error}</p> : null}
