@@ -8,6 +8,9 @@ Nano_Deploy/
 ├── README.md
 ├── requirements-platform.txt
 ├── nano_rtsp_detect.py
+├── vision/
+│   ├── event_rules.py
+│   └── test_event_rules.py
 ├── helmet.pt / fall.pt / smoke.pt / danger.pt
 ├── dashboard_platform/
 │   ├── agent/
@@ -68,6 +71,11 @@ Low latency comes from WebRTC. The browser does **not** pull RTSP directly. The 
 - Workflow panels for mapping, map saving, navigation, and RViz launch through the Agent whitelist.
 - Online 2D map viewer that reads saved `yaml + pgm` maps from the configured maps directory.
 - Status cards for Agent availability, video source, model, CPU, memory, GPU, and heartbeat.
+
+The `vision/` package contains the first patrol MVP rule layer: a small IoU
+tracker and a no-parking ROI + dwell-time rule. It is intentionally separate
+from ROS and motion control. See `vision/README.md` for the interface and
+tests.
 
 ## Product Direction
 
