@@ -154,6 +154,12 @@ class ModelProcessManager:
                 command.append("--annotate")
             if request.event_classes:
                 command.extend(["--event-classes", request.event_classes])
+            if request.parking_zone is not None:
+                command.extend(["--parking-zone", *(str(value) for value in request.parking_zone)])
+                command.extend(["--parking-dwell", str(request.parking_dwell_seconds)])
+                command.extend(["--parking-cooldown", str(request.parking_cooldown_seconds)])
+                command.extend(["--parking-min-conf", str(request.parking_min_confidence)])
+                command.extend(["--parking-track-iou", str(request.parking_track_iou)])
             command.extend(self.settings.extra_args)
 
             env = os.environ.copy()

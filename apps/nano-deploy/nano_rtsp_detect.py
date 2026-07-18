@@ -12,6 +12,11 @@ import torch
 from detect_visual import YOLOPredict
 
 try:
+    from vision.event_rules import Detection, IllegalParkingRule, IoUTracker, NoParkingZone
+except ImportError:
+    from event_rules import Detection, IllegalParkingRule, IoUTracker, NoParkingZone
+
+try:
     from utils.dataloaders import LoadStreams, LoadImages
 except ImportError:
     from utils.datasets import LoadStreams, LoadImages
@@ -74,6 +79,18 @@ def parse_args():
     parser.add_argument("--snapshot-interval", type=float, default=2.0, help="seconds between snapshot updates")
     parser.add_argument("--snapshot-max-size", type=int, default=0, help="max width for snapshot (0 = no resize)")
     parser.add_argument("--upload-snapshot", action="store_true", help="upload snapshot frames to upload-url")
+    parser.add_argument(
+        "--parking-zone",
+        type=float,
+        nargs=4,
+        default=None,
+        metavar=("X1", "Y1", "X2", "Y2"),
+        help="normalized no-parking ROI; enables vehicle dwell-time rules",
+    )
+    parser.add_argument("--parking-dwell", type=float, default=5.0, help="seconds a vehicle must dwell in ROI")
+    parser.add_argument("--parking-cooldown", type=float, default=30.0, help="seconds between repeated events")
+    parser.add_argument("--parking-min-conf", type=float, default=0.5, help="minimum vehicle confidence")
+    parser.add_argument("--parking-track-iou", type=float, default=0.3, help="IoU threshold for vehicle tracking")
     return parser.parse_args()
 
 
@@ -216,6 +233,18 @@ def main():
     headers = parse_headers(args.upload_header)
     save_dir = Path(args.save_dir)
 
+    parking_tracker = None
+    parking_rule = None
+    if args.parking_zone is not None:
+        zone = NoParkingZone("default_no_parking", *args.parking_zone)
+        parking_tracker = IoUTracker(iou_threshold=args.parking_track_iou)
+        parking_rule = IllegalParkingRule(
+            zone,
+            dwell_seconds=args.parking_dwell,
+            min_confidence=args.parking_min_conf,
+            cooldown_seconds=args.parking_cooldown,
+        )
+
     predictor = YOLOPredict(
         args.weights,
         "inference/output",
@@ -271,11 +300,33 @@ def main():
             events = filter_events(det, predictor.names, predictor.conf_thres, event_classes)
             events = apply_cooldown(events, args.min_event_interval, last_emit)
 
+            parking_events = []
+            if parking_tracker is not None and parking_rule is not None:
+                parking_detections = []
+                if det is not None and len(det):
+                    for *xyxy, conf, cls in det:
+                        parking_detections.append(
+                            Detection(
+                                predictor.names[int(cls)],
+                                float(conf),
+                                tuple(float(value) for value in xyxy),
+                            )
+                        )
+                frame_timestamp = time.time()
+                tracked = parking_tracker.update(frame_timestamp, parking_detections)
+                parking_events = parking_rule.update(frame_timestamp, tracked, (im0.shape[1], im0.shape[0]))
+                events.extend(
+                    (event.event_type, event.confidence, [int(value) for value in event.bbox])
+                    for event in parking_events
+                )
+
             if events:
                 out_path, meta = save_event_frame(im0, events, save_dir, args.annotate)
                 upload_event_image(out_path, meta, args.upload_url, args.upload_timeout, headers)
                 # Print a special marker for the Agent to potentially broadcast
                 print(f"EVENT_SAVED: {out_path.name}")
+                if parking_events:
+                    print(f"EVENT_JSON: {json.dumps([event.as_dict() for event in parking_events])}")
 
             show_frame = im0.copy()
             det_summary = []

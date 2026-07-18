@@ -18,6 +18,21 @@
 - 最后由 Agent 将事件推送给 Dashboard；
 - 视觉事件永远不直接触发 `/cmd_vel_nav`。
 
+检测进程启用禁停规则时，示例参数如下（坐标为归一化图像坐标）：
+
+```bash
+python nano_rtsp_detect.py \
+  --weights models/roadside_v1.pt \
+  --event-classes garbage \
+  --parking-zone 0.25 0.25 0.75 0.90 \
+  --parking-dwell 5 \
+  --parking-cooldown 30
+```
+
+Agent 的 `POST /model/start` 也支持同名语义的 `parking_zone`、
+`parking_dwell_seconds`、`parking_cooldown_seconds`、
+`parking_min_confidence` 和 `parking_track_iou` 字段。
+
 运行单元测试：
 
 ```bash
