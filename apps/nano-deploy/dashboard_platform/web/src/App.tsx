@@ -20,7 +20,7 @@ import {
 import { Panel } from "./components/Panel";
 import { VideoStream } from "./components/VideoStream";
 import { API_BASE, apiFetch, classNames, clearToken, formatNumber, loadToken, saveToken, wsUrl } from "./lib";
-import type { ConnectionState, LogItem, MapEntry, MapMetadata, MediaItem, MediaStatus, StreamStats, SystemStatus } from "./types";
+import type { ConnectionState, LogItem, MapEntry, MapMetadata, MediaItem, MediaStatus, SiyiCameraStatus, StreamStats, SystemStatus } from "./types";
 
 type LoginResponse = { token: string; username: string };
 
@@ -62,6 +62,7 @@ function describeError(error: unknown) {
 function App() {
   const [token, setToken] = useState(loadToken());
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("helmet");
   const [source, setSource] = useState("");
@@ -163,6 +164,28 @@ function App() {
       logSocket.close();
     };
   }, [token, source, videoSourceMode]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const refreshCameraStatus = () => {
+      void apiFetch<SiyiCameraStatus>("/api/camera/status", token)
+        .then((payload) => {
+          if (!cancelled) setCameraStatus(payload);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setCameraStatus({ enabled: true, connected: false, error: describeError(err) });
+          }
+        });
+    };
+    refreshCameraStatus();
+    const timer = window.setInterval(refreshCameraStatus, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -848,7 +871,7 @@ function App() {
 
 
         <Panel title="系统与底盘状态" subtitle="查看系统资源、底盘在线状态与控制模式。">
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-4">
             <div className="rounded-xl border border-base bg-card/50 p-4">
               <p className="mb-3 text-xs uppercase tracking-[0.18em] text-disabled">系统资源</p>
               <div className="grid grid-cols-2 gap-3">
@@ -905,6 +928,24 @@ function App() {
                   onClick={() => void setMotionMode("real")}
                 />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-base bg-card/50 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-disabled">ZT6 云台</p>
+                <StatusPill tone={cameraStatus?.connected ? "good" : "warn"}>
+                  {!cameraStatus?.enabled ? "disabled" : cameraStatus?.connected ? "online" : "offline"}
+                </StatusPill>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard label="模式" value={cameraStatus?.status?.motion_mode_name || "--"} />
+                <StatCard label="录像" value={cameraStatus?.status?.record_state_name || "--"} />
+                <StatCard label="Yaw" value={formatNumber(cameraStatus?.attitude?.yaw_deg, "°")} />
+                <StatCard label="Pitch" value={formatNumber(cameraStatus?.attitude?.pitch_deg, "°")} />
+              </div>
+              <p className="mt-3 truncate text-xs text-muted" title={cameraStatus?.hardware_id || undefined}>
+                ID: {cameraStatus?.hardware_id || cameraStatus?.error || "--"}
+              </p>
             </div>
           </div>
           {status?.base_status?.last_error ? <p className="mt-3 text-sm text-amber-600">底盘提示：{status.base_status.last_error}</p> : null}

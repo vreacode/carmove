@@ -55,6 +55,26 @@ export type BaseStatus = {
   last_error?: string | null;
 };
 
+export type SiyiCameraStatus = {
+  enabled: boolean;
+  connected: boolean;
+  target?: string;
+  hardware_id?: string | null;
+  firmware?: Record<string, string> | null;
+  status?: {
+    motion_mode_name?: string;
+    record_state_name?: string;
+    mounting_direction_name?: string;
+    video_output_name?: string;
+  } | null;
+  attitude?: {
+    yaw_deg?: number;
+    pitch_deg?: number;
+    roll_deg?: number;
+  } | null;
+  error?: string | null;
+};
+
 export type SystemStatus = {
   agent_online: boolean;
   board_online: boolean;

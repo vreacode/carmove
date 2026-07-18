@@ -31,6 +31,10 @@ class AgentSettings(BaseSettings):
     camera_rtsp_visible_url: str = ""
     camera_rtsp_ir_url: str = ""
     camera_rtsp_url: str = ""
+    siyi_zt6_enabled: bool = True
+    siyi_zt6_host: str = "10.16.16.10"
+    siyi_zt6_port: int = 37260
+    siyi_zt6_query_timeout_seconds: float = 1.0
     allow_mjpeg_fallback: bool = False
     webrtc_ice_servers: str = "[]"
     webrtc_output_width: int = 960

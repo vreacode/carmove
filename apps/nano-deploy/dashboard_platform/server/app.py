@@ -130,6 +130,11 @@ async def system_status(_: str = Depends(require_token)) -> dict:
         raise
 
 
+@app.get("/api/camera/status")
+async def api_camera_status(_: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("GET", "/camera/status")
+
+
 @app.post("/api/model/start")
 async def api_model_start(payload: ModelStartRequest, _: str = Depends(require_token)) -> dict:
     await hub.broadcast_log(hub.log("system", "info", f"model start requested: {payload.model_id}"))

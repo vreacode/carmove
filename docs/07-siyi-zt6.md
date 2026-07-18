@@ -32,6 +32,9 @@ python3 tools/siyi_zt6_status.py \\
   --timeout 2
 ```
 
+板端 Agent 提供只读接口 `GET /camera/status`，服务端代理为
+`GET /api/camera/status`；Dashboard 每 5 秒读取一次并显示链路、模式、录像状态和 Yaw/Pitch。该接口通过线程执行网络查询，不阻塞 Agent 的异步事件循环。
+
 手册规定的 UART 参数为 `115200 8N1`；SDK 数据帧以 `55 66` 开始，CRC16 使用多项式 `0x1021`、初值 `0`、无最终异或。
 
 ## 当前现场记录

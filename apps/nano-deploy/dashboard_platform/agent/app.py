@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from .config import AgentSettings
+from camera.siyi_zt6 import SiyiZt6Client
 from .logs import LogBuffer
 from .motion import MotionControlManager
 from .pose import RobotPoseManager
@@ -70,6 +71,38 @@ async def health() -> dict[str, str]:
 async def status() -> dict:
     payload = status_collector.collect()
     return payload.model_dump()
+
+
+@app.get("/camera/status", dependencies=[Depends(verify_token)])
+async def camera_status() -> dict:
+    """Read the ZT6 state without blocking the Agent event loop."""
+
+    if not settings.siyi_zt6_enabled:
+        return {
+            "enabled": False,
+            "connected": False,
+            "target": f"{settings.siyi_zt6_host}:{settings.siyi_zt6_port}",
+            "error": "SIYI ZT6 status polling is disabled",
+        }
+
+    def query() -> dict:
+        client = SiyiZt6Client(
+            settings.siyi_zt6_host,
+            settings.siyi_zt6_port,
+            settings.siyi_zt6_query_timeout_seconds,
+        )
+        return client.query_snapshot()
+
+    try:
+        snapshot = await asyncio.to_thread(query)
+    except Exception as exc:
+        return {
+            "enabled": True,
+            "connected": False,
+            "target": f"{settings.siyi_zt6_host}:{settings.siyi_zt6_port}",
+            "error": str(exc),
+        }
+    return {"enabled": True, "connected": True, "error": None, **snapshot}
 
 
 @app.get("/models", dependencies=[Depends(verify_token)])
