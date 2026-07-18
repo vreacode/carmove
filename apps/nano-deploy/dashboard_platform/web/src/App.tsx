@@ -989,9 +989,9 @@ function App() {
                   <button
                     className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={!cameraStatus?.motion_enabled || gimbalPending}
-                    onClick={() => void pulseGimbal(-10, 0)}
+                    onClick={() => void pulseGimbal(10, 0)}
                   >
-                    Yaw−
+                    左转
                   </button>
                   <button
                     className="rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1003,9 +1003,9 @@ function App() {
                   <button
                     className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={!cameraStatus?.motion_enabled || gimbalPending}
-                    onClick={() => void pulseGimbal(10, 0)}
+                    onClick={() => void pulseGimbal(-10, 0)}
                   >
-                    Yaw+
+                    右转
                   </button>
                   <div />
                   <button

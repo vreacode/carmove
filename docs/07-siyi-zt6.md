@@ -36,7 +36,7 @@ python3 tools/siyi_zt6_status.py \\
 `GET /api/camera/status`；Dashboard 每 5 秒读取一次并显示链路、模式、录像状态和 Yaw/Pitch。该接口通过线程执行网络查询，不阻塞 Agent 的异步事件循环。
 
 Agent 还提供了受保护的 `POST /camera/gimbal/pulse` 和
-`POST /camera/gimbal/stop`。脉冲控制默认关闭（`SIYI_ZT6_MOTION_ENABLED=false`），并限制速度与持续时间；开启后 Dashboard 仅显示 `Yaw+ / Yaw− / Pitch+ / Pitch−` 协议方向按钮，直到完成现场方向确认。
+`POST /camera/gimbal/stop`。脉冲控制默认关闭（`SIYI_ZT6_MOTION_ENABLED=false`），并限制速度与持续时间。
 
 手册规定的 UART 参数为 `115200 8N1`；SDK 数据帧以 `55 66` 开始，CRC16 使用多项式 `0x1021`、初值 `0`、无最终异或。
 
@@ -62,7 +62,9 @@ Agent 还提供了受保护的 `POST /camera/gimbal/pulse` 和
 - 姿态：Yaw 从 `0°` 变化到约 `-7.2°`，Pitch/Roll 保持 `0°`
 - 停止后静置 `1 s`，Yaw 变化 `0.0°`
 
-因此当前设备的实际 Yaw 正方向与手册示例文字相反，后续控制界面需要做方向映射验证；在映射确认前不把运动按钮接入 Dashboard。
+因此当前设备的实际 Yaw 正方向与手册示例文字相反，需要在控制界面做方向映射。
+
+现场已确认：`Yaw+10` 对应镜头左转，`Yaw-10` 对应镜头右转。Dashboard 已按此映射为“左转/右转”；Pitch 方向仍使用 `Pitch+ / Pitch−` 协议标签，待单独确认上下方向后再改成“上仰/下俯”。
 
 手册的产品 ID 表将 ZT6 标为 `0x82`，当前设备返回 ID 前缀为 `83`，暂作为固件/硬件版本差异记录，不影响 RTSP 和 UDP 查询链路。
 
