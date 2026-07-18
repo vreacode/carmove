@@ -1,10 +1,8 @@
-"""Dependency-free read-only SIYI ZT6 UDP SDK client.
+"""Dependency-free SIYI ZT6 UDP SDK client.
 
 The ZT6 manual documents a little-endian packet format with a CRC-16/CCITT
-checksum (polynomial 0x1021, initial value 0, no final XOR).  This module
-starts with read-only queries so it is safe to use while the camera is mounted
-on the vehicle.  Motion, zoom, recording, and configuration commands are
-intentionally not exposed yet.
+checksum (polynomial 0x1021, initial value 0, no final XOR).  Status queries
+are read-only; motion commands are bounded by the callers that expose them.
 """
 
 from __future__ import annotations
@@ -24,6 +22,7 @@ CTRL_ACK_PACKET = 0x02
 CMD_GET_FIRMWARE = 0x01
 CMD_GET_HARDWARE_ID = 0x02
 CMD_TURN = 0x07
+CMD_CENTER = 0x08
 CMD_GET_STATUS = 0x0A
 CMD_GET_ATTITUDE = 0x0D
 
@@ -290,6 +289,12 @@ class SiyiZt6Client:
         """Send the documented zero-speed command."""
 
         return self.turn(0, 0)
+
+    def center(self) -> bool:
+        """Trigger the documented yaw-and-pitch center position."""
+
+        response = self._request(CMD_CENTER, b"\x01")
+        return bool(response.data and response.data[0] == 1)
 
     def query_status(self) -> GimbalStatus:
         return GimbalStatus.from_payload(self._request(CMD_GET_STATUS).data)

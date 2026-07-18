@@ -428,6 +428,18 @@ function App() {
     }
   }
 
+  async function centerGimbal() {
+    try {
+      setGimbalPending(true);
+      setError("");
+      await apiFetch("/api/camera/gimbal/center", token, { method: "POST" });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setGimbalPending(false);
+    }
+  }
+
   async function runPreset(name: string) {
     try {
       setPresetPending(name);
@@ -988,8 +1000,8 @@ function App() {
                   <div />
                   <button
                     className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
-                    disabled={!cameraStatus?.motion_enabled || gimbalPending}
-                    onClick={() => void pulseGimbal(10, 0)}
+                  disabled={!cameraStatus?.motion_enabled || gimbalPending}
+                  onClick={() => void pulseGimbal(-10, 0)}
                   >
                     左转
                   </button>
@@ -1002,8 +1014,8 @@ function App() {
                   </button>
                   <button
                     className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40"
-                    disabled={!cameraStatus?.motion_enabled || gimbalPending}
-                    onClick={() => void pulseGimbal(-10, 0)}
+                  disabled={!cameraStatus?.motion_enabled || gimbalPending}
+                  onClick={() => void pulseGimbal(10, 0)}
                   >
                     右转
                   </button>
@@ -1017,6 +1029,13 @@ function App() {
                   </button>
                   <div />
                 </div>
+                <button
+                  className="mt-2 w-full rounded-lg border border-accent-200 bg-accent-50 px-2 py-2 text-xs text-accent-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={gimbalPending || !cameraStatus?.connected}
+                  onClick={() => void centerGimbal()}
+                >
+                  回中
+                </button>
               </div>
             </div>
           </div>

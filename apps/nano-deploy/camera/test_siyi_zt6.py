@@ -5,6 +5,7 @@ from siyi_zt6 import (
     CMD_GET_FIRMWARE,
     CMD_GET_HARDWARE_ID,
     CMD_GET_STATUS,
+    CMD_CENTER,
     CMD_TURN,
     Attitude,
     FirmwareInfo,
@@ -38,6 +39,10 @@ class SiyiZt6ProtocolTests(unittest.TestCase):
         self.assertEqual(
             build_packet(CMD_TURN, bytes((100, 100))),
             bytes.fromhex("55 66 01 02 00 00 00 07 64 64 3d cf"),
+        )
+        self.assertEqual(
+            build_packet(CMD_CENTER, b"\x01"),
+            bytes.fromhex("55 66 01 01 00 00 00 08 01 d1 12"),
         )
 
     def test_turn_packet_accepts_signed_speeds(self):

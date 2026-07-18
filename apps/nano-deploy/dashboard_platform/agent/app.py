@@ -183,6 +183,26 @@ async def camera_gimbal_stop() -> dict:
     return {"ok": ack, "stop_ack": ack}
 
 
+@app.post("/camera/gimbal/center", dependencies=[Depends(verify_token)])
+async def camera_gimbal_center() -> dict:
+    """Trigger the ZT6 native yaw-and-pitch center command."""
+
+    def center() -> bool:
+        client = SiyiZt6Client(
+            settings.siyi_zt6_host,
+            settings.siyi_zt6_port,
+            settings.siyi_zt6_query_timeout_seconds,
+        )
+        return client.center()
+
+    async with siyi_gimbal_lock:
+        try:
+            ack = await asyncio.to_thread(center)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"ZT6 gimbal center failed: {exc}") from exc
+    return {"ok": ack, "center_ack": ack}
+
+
 @app.get("/models", dependencies=[Depends(verify_token)])
 async def models() -> list[dict]:
     return [model.model_dump() for model in settings.models]

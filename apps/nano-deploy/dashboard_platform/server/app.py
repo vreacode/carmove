@@ -151,6 +151,11 @@ async def api_camera_gimbal_stop(_: str = Depends(require_token)) -> dict:
     return await bridge.fetch_json("POST", "/camera/gimbal/stop")
 
 
+@app.post("/api/camera/gimbal/center")
+async def api_camera_gimbal_center(_: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("POST", "/camera/gimbal/center")
+
+
 @app.post("/api/model/start")
 async def api_model_start(payload: ModelStartRequest, _: str = Depends(require_token)) -> dict:
     await hub.broadcast_log(hub.log("system", "info", f"model start requested: {payload.model_id}"))
