@@ -983,7 +983,7 @@ function App() {
                     disabled={!cameraStatus?.motion_enabled || gimbalPending}
                     onClick={() => void pulseGimbal(0, 10)}
                   >
-                    Pitch+
+                    上仰
                   </button>
                   <div />
                   <button
@@ -1013,7 +1013,7 @@ function App() {
                     disabled={!cameraStatus?.motion_enabled || gimbalPending}
                     onClick={() => void pulseGimbal(0, -10)}
                   >
-                    Pitch−
+                    下俯
                   </button>
                   <div />
                 </div>
