@@ -5,6 +5,7 @@ from siyi_zt6 import (
     CMD_GET_FIRMWARE,
     CMD_GET_HARDWARE_ID,
     CMD_GET_STATUS,
+    CMD_TURN,
     Attitude,
     FirmwareInfo,
     GimbalStatus,
@@ -33,6 +34,16 @@ class SiyiZt6ProtocolTests(unittest.TestCase):
         self.assertEqual(
             build_packet(CMD_GET_ATTITUDE),
             bytes.fromhex("55 66 01 00 00 00 00 0d e8 05"),
+        )
+        self.assertEqual(
+            build_packet(CMD_TURN, bytes((100, 100))),
+            bytes.fromhex("55 66 01 02 00 00 00 07 64 64 3d cf"),
+        )
+
+    def test_turn_packet_accepts_signed_speeds(self):
+        self.assertEqual(
+            build_packet(CMD_TURN, bytes((246, 0))),
+            build_packet(CMD_TURN, bytes.fromhex("f6 00")),
         )
 
     def test_status_response_is_decoded(self):

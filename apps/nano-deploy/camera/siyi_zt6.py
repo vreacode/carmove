@@ -23,6 +23,7 @@ CTRL_ACK_PACKET = 0x02
 
 CMD_GET_FIRMWARE = 0x01
 CMD_GET_HARDWARE_ID = 0x02
+CMD_TURN = 0x07
 CMD_GET_STATUS = 0x0A
 CMD_GET_ATTITUDE = 0x0D
 
@@ -256,10 +257,10 @@ class SiyiZt6Client:
         self.timeout = timeout
         self._sequence = 0
 
-    def _request(self, command_id: int) -> SiyiPacket:
+    def _request(self, command_id: int, data: bytes = b"") -> SiyiPacket:
         sequence = self._sequence
         self._sequence = (self._sequence + 1) & 0xFFFF
-        request = build_packet(command_id, sequence=sequence)
+        request = build_packet(command_id, data, sequence=sequence)
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.settimeout(self.timeout)
             sock.sendto(request, (self.host, self.port))
@@ -274,6 +275,21 @@ class SiyiZt6Client:
         if not packet.is_ack:
             raise SiyiProtocolError("response packet is not marked as ACK")
         return packet
+
+    def turn(self, yaw_speed: int, pitch_speed: int) -> bool:
+        """Send one bounded velocity command; caller must send zero to stop."""
+
+        for name, value in (("yaw_speed", yaw_speed), ("pitch_speed", pitch_speed)):
+            if not isinstance(value, int) or not -100 <= value <= 100:
+                raise ValueError(f"{name} must be an integer in [-100, 100]")
+        data = struct.pack("<bb", yaw_speed, pitch_speed)
+        response = self._request(CMD_TURN, data)
+        return bool(response.data and response.data[0] == 1)
+
+    def stop(self) -> bool:
+        """Send the documented zero-speed command."""
+
+        return self.turn(0, 0)
 
     def query_status(self) -> GimbalStatus:
         return GimbalStatus.from_payload(self._request(CMD_GET_STATUS).data)
