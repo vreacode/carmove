@@ -38,6 +38,7 @@
 34. 加强集成建图入口：雷达必须存在 `Publisher count: 1` 才算就绪，并把 PID-only 清理陷阱提前到所有等待/启动前；板端停机实测安全拒绝于 `wheeltec_robot not ready`，无残留建图 PID 文件。
 35. 对当前基线 manifest 做完整数据流水线预检：5 张图片按单组进入 train，`validate_yolo_dataset.py` 明确以非零状态拒绝 5 个缺失标签和空 val，确认训练闸门有效。
 36. 同步加强集成导航入口：雷达必须存在 `Publisher count: 1`，并在地图/底盘前置检查前安装退出清理；板端 `check gmap_map` 实测仍安全拒绝于 `wheeltec_robot not ready`，无导航 PID 文件。
+37. 为仓库旧版 2D 建图/导航入口提前安装 `EXIT/INT/TERM` 清理陷阱；`bash -n`、差异检查和全局清理关键字审计通过。
 
 ## 测试结果
 
@@ -75,6 +76,7 @@ YOLO resource baseline: recorded (tegrastats during 3-frame FP16 run; RAM ~3.9/7
 integrated mapping preflight: expected refusal while base stopped (`wheeltec_robot not ready`), no mapping PID file left behind
 current dataset pipeline preflight: expected refusal (5 unlabelled images, one group, empty val; training gate not entered)
 integrated navigation preflight hardening: passed (map gate then expected refusal at `wheeltec_robot not ready`, no navigation PID file)
+legacy 2D script cleanup hardening: passed (`bash -n`, `git diff --check`, no `pkill`/`killall`)
 aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication

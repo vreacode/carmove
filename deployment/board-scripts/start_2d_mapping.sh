@@ -39,7 +39,7 @@ mkdir -p "$LOG_DIR"
 rm -f "$PID_FILE"
 
 cleanup
-trap cleanup INT TERM
+trap cleanup EXIT INT TERM
 
 run_cmd() {
   local name="$1"
