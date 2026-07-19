@@ -26,7 +26,7 @@
 
 首版建议把 GitHub 仓库设为 Private。仓库不会提交 .env、密码/token、模型权重、虚拟环境、录像、截图、rosbag 或构建产物；模型权重和板上运行数据保留在设备本地。
 
-板上原始运行目录仍保留在 /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy，本仓库是整理后的版本化副本，整理过程不修改原目录。
+板上实际运行目录仍是 `/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy`。本仓库保存可审查的版本化源码；需要联调时，受控的运行修复会同步到板端目录，但板端的 `.env`、模型权重、运行媒体和构建产物不回写到 GitHub。两边发生改动后，应先做差异核对再继续部署。
 
 ## 本地快速查看
 
