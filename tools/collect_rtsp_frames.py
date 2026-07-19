@@ -37,6 +37,34 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def show_preview(cv2, frame, args: argparse.Namespace, saved: int, next_save_at: float) -> bool:
+    """Show a small heads-up display without changing the saved frame."""
+    display = frame.copy()
+    remaining = max(0.0, next_save_at - time.monotonic())
+    next_save = "now" if remaining <= 0.0 else f"{remaining:.1f}s"
+    height, width = display.shape[:2]
+    lines = [
+        f"scene: {args.scene or '-'}",
+        f"saved: {saved}   next: {next_save}   interval: {args.interval:.1f}s",
+        f"size: {width}x{height}   q: stop",
+    ]
+    panel_height = 26 + 24 * len(lines)
+    cv2.rectangle(display, (0, 0), (min(width, 760), panel_height), (0, 0, 0), -1)
+    for index, line in enumerate(lines, start=1):
+        cv2.putText(
+            display,
+            line,
+            (12, 24 * index),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.62,
+            (0, 255, 0),
+            1,
+            cv2.LINE_AA,
+        )
+    cv2.imshow("RTSP capture", display)
+    return cv2.waitKey(1) & 0xFF == ord("q")
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -87,8 +115,7 @@ def main() -> int:
             now = time.monotonic()
             if now < next_save_at:
                 if args.preview:
-                    cv2.imshow("RTSP capture", frame)
-                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                    if show_preview(cv2, frame, args, saved, next_save_at):
                         break
                 continue
 
@@ -119,8 +146,7 @@ def main() -> int:
             print(f"saved {saved}: {frame_path}")
 
             if args.preview:
-                cv2.imshow("RTSP capture", frame)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
+                if show_preview(cv2, frame, args, saved, next_save_at):
                     break
     except KeyboardInterrupt:
         print("\ninterrupted by user")
