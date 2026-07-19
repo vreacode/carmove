@@ -44,3 +44,29 @@
 - 每次采集填写 scene、时间、相机位置、天气、路线和备注。
 
 采集工具：tools/collect_rtsp_frames.py。它只读取 RTSP 并生成图片和 manifest，不会控制小车。
+
+当前板上已确认：`video1` 是 HEVC 1920×1080/30fps 可见光主码流，`video2` 是 HEVC 640×512/30fps 红外流。垃圾和车辆第一版使用 `video1`；红外另行建集。
+
+需要在屏幕上观察画面时加 `--preview`。多行命令中的 `\` 必须放在行末，不能写成 `\ --source`。
+
+## 数据处理工具
+
+采集完成后，先按场景和日期成组准备 train/val，避免同一段视频的相邻帧泄漏到验证集：
+
+```bash
+python3 tools/prepare_yolo_dataset.py \
+  --manifest datasets/local/roadside_v1/manifests/<capture>.csv \
+  --output datasets/local/roadside_v1/yolo_v1 \
+  --val-ratio 0.2 \
+  --names garbage vehicle
+```
+
+标注完成后运行：
+
+```bash
+python3 tools/validate_yolo_dataset.py \
+  --dataset datasets/local/roadside_v1/yolo_v1/dataset.yaml \
+  --report datasets/local/roadside_v1/yolo_v1/validation.json
+```
+
+详细的采集、4K 母片、划分和标注约定见 `docs/08-data-pipeline.md`。
