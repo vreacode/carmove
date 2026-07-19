@@ -60,6 +60,7 @@
 56. 采集板端空闲资源基线：兼容旧版 `tegrastats` 后取得 4 秒样本，RAM 约 `2.93–2.95/7.62 GB`，最高温度约 `60°C`，单核 CPU 峰值约 `75%`；采样期间无模型、ROS 或运动进程。
 57. 安全配置审计发现：文档中的云台默认值为关闭，但板端只读状态为 `motion_enabled=true`；本轮不擅自改 `.env`、不发送云台指令，已将“无人值守前人工复核该开关”列为后续安全事项。
 58. 完成本机监听面审计：仅发现预期的 Agent `9001` 和 Dashboard `8080` Uvicorn 监听，未发现本地 RTSP、云台 UDP、底盘或导航监听；两个用户服务均为 `active` 且 `ExecMainStatus=0`。
+59. 完成公开数据集预研但未下载：确定 TACO 适合作为垃圾背景/类别映射参考，BDD100K 和 Open Images V7 适合作为车辆泛化预训练参考；许可、来源元数据和本车场景域差异必须单独保留，不能替代本车验证集。
 
 ## 测试结果
 
@@ -133,6 +134,13 @@ ZT6 read-only status: connected=true
 - 平台：已形成 Jetson + ROS2 底盘/传感器接口、ZT6 可见光/红外视频接入、Dashboard、Agent/Server、云台控制和安全前置检查；模型、建图、导航均可独立停止，未授权时不会启动运动链路。
 - 数据集：已确定 `garbage`、`vehicle` 两类第一版定义，具备带场景/日期/备注的 manifest、分组 train/val、YOLO 标注格式检查和训练闸门；当前仅有 5 张未标注单场景基线图，不能包装为已完成训练集。
 - 待补证据：至少两个以上日期/场景组的现场数据、完整标签、训练曲线、验证集 Precision/Recall/mAP、Jetson 稳态 FPS 和误报/漏报案例。
+
+## 公开数据集预研（仅作候选，不自动下载）
+
+- [TACO 官方仓库](https://github.com/pedropro/TACO)：面向真实环境垃圾图像，提供 COCO 标注；适合补充垃圾类别和背景，但原始类别较细、数据规模较小，需映射到本项目的 `garbage`，并逐项核对图片来源许可。
+- [BDD100K 官方仓库](https://github.com/bdd100k/bdd100k)：面向道路驾驶场景，包含 road object detection 等任务；适合车辆泛化预训练参考，但与 ZT6 车载视角、园区道路和目标尺寸存在域差异。
+- [Open Images V7 官方说明](https://storage.googleapis.com/openimages/web/factsfigures_v7.html)：提供大规模目标框和类别层级，可筛选 `Vehicle` 相关类别；官方明确标注许可与图片许可需分别理解，并要求使用者自行核验每张图片的许可状态。
+- 使用原则：不从搜索引擎随机抓图；下载时保存来源 URL、数据集版本、原始许可和转换日志；公开数据只用于预训练/补充，最终验证集必须来自本车 `video1` 采集场景。
 
 ## 下一步优先级
 
