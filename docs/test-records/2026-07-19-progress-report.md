@@ -92,6 +92,7 @@
 88. 只读盘点模型与数据资产：仓库没有 `.pt/.onnx/.engine` 目标权重，板端已有 `helmet/fall/smoke/danger` 模型均非垃圾/车辆模型；正式数据集仍为 5 张图片 + 1 个 manifest，所以尚未跨过训练闸门。
 89. 实测训练闸门按设计拒绝当前数据：`validate_yolo_dataset.py` 报告 `images/train` 与 `images/val` 均无图像，类别名仍为 `garbage/vehicle`；这是防止空数据启动训练的预期保护，不是代码故障。
 90. 10:39:45–10:42:15 做 6 次、间隔 30 秒的服务稳定性观察：Agent/Dashboard 始终 `active`，8080/9001 始终 HTTP 200，目标模型/底盘/导航/雷达真实残留始终为 0。
+91. 10:43 报告完整性复核通过：完成项 1–90 连续，优先级 1–5 完整，Markdown 代码围栏成对；Git 工作区除用户原有 ZT6 手册 PDF 外无其他未提交变更。
 
 ## 测试结果
 
@@ -179,6 +180,7 @@ ZT6 live read-only status: passed (connected; firmware code 0.1.9/gimbal 0.2.3; 
 model/data asset boundary audit: recorded (no target weights; deployed weights are helmet/fall/smoke/danger; formal dataset 5 images + 1 manifest)
 empty training gate: expected refusal (train/val contain no images; names garbage/vehicle preserved)
 three-minute stability watch: passed (6/6 samples; services active, health 200, true residual count 0)
+report integrity audit: passed (items 1-90 continuous; priorities 1-5; code fences balanced; only user PDF untracked)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
