@@ -56,6 +56,7 @@
 52. 对现有 `baseline_20260717.csv` 做只读数据审计：5 帧均为 1920×1080、文件完整，属于单一 `nav_test_day__2026-07-17` 分组，且 0 个相邻标签；工具正确警告当前不能进行有意义的 train/val 划分。
 53. 重复只读核对 ZT6 两路 RTSP：`video1` 仍为 HEVC 1920×1080/30fps 可见光，`video2` 仍为 HEVC 640×512/30fps 红外；现有 manifest 全部来自 `video1`，符合第一版数据集规划。
 54. 重复运行只读 ROS 健康检查：底盘、雷达、IMU、`/scan`、`/map` 均未启动，RTSP 可读；Dashboard 同步确认底盘 `running=false`、控制模式 `dry_run`、`armed=false`、`manual_override=false`，符合当前安全停机基线。
+55. 只读核对云台状态接口：首次查询出现 1 次 SIYI UDP timeout，随后连续 3 次均为 `connected=true`、`motion_enabled=true`，同时 `video1` 仍可读；本轮未发送任何 `pulse`、`stop` 或 `center` 指令，云台实际运动状态未被改变。
 
 ## 测试结果
 
@@ -110,6 +111,7 @@ current-version read-only regression: passed (34 tests, Python compile, core par
 capture manifest audit: expected refusal (5 frames, one scene/date group, 0 missing files, 1920×1080, 0 labels; grouped split not meaningful)
 RTSP profile repeat audit: passed (video1 HEVC 1920×1080/30fps; video2 HEVC 640×512/30fps; baseline manifest uses video1 only)
 ROS/control read-only safety baseline: expected stopped state (ROS healthcheck pass=3/fail=8 because base topics are intentionally stopped; RTSP readable; base stopped, dry_run, disarmed, no manual override)
+ZT6 gimbal status read-only audit: transient status timeout once, then 3/3 connected; motion_enabled=true; video1 readable; no gimbal command sent
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
