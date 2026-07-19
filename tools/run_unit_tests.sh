@@ -11,3 +11,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 "$PYTHON_BIN" -m unittest tools.test_dataset_tools
 "$PYTHON_BIN" -m unittest tools.test_capture_manifest
 "$PYTHON_BIN" -m unittest tools.test_collect_rtsp_frames
+(
+  cd apps/nano-deploy
+  "$PYTHON_BIN" -m unittest dashboard_platform.agent.test_motion
+)

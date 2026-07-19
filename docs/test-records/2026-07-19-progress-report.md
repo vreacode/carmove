@@ -21,6 +21,7 @@
 17. 完成仓库产物审计：当前没有本地训练权重，正式数据仍只有 5 张基线图，Git 未跟踪 `.env`、录像、图片或模型权重；Dashboard 两项用户服务保持 active。
 18. 修复建图/导航脚本的进程清理方式：移除模糊 `pkill -f`，改为只向本脚本 PID 文件记录的进程发送停止信号，避免误杀同机其他 ROS 实例。
 19. 扩展 `tools/ros_healthcheck.sh`：对底盘、原始/融合 IMU、雷达点云和 `/scan` 按实际发布者测频率；停机或无发布者时给出明确跳过原因，不再无谓等待。
+20. 增加 Dashboard 控制状态机的 5 个无硬件安全单测，覆盖默认 dry-run/锁定、未解锁拒绝、速度上限、导航互锁和 real 模式底盘就绪条件。
 
 ## 测试结果
 
@@ -39,6 +40,7 @@ repository artifact audit: passed (no tracked secrets/media/weights)
 mapping/navigation cleanup audit: passed (`bash -n`, PID-file-only cleanup)
 ROS rate-check audit: passed (publisher-aware, `RATE_TIMEOUT_SECONDS` configurable)
 ROS healthcheck offline run: completed as expected with base stopped; RTSP check passed (HEVC 1920×1080)
+motion safety tests: 5 passed (no ROS publisher initialized)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
