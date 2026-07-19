@@ -49,10 +49,11 @@ if [[ "${1:-}" == "stop" ]]; then
 fi
 
 cleanup
+trap cleanup EXIT INT TERM
 
 wait_for_ready "wheeltec_robot" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 node list | grep -q '^/wheeltec_robot$'" 12
 wait_for_ready "/odom" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /odom -v | grep -q 'Publisher count: 1'" 12
-wait_for_ready "/c16/lslidar_point_cloud" "source /opt/ros/humble/setup.bash && source /home/nvidia/fastlio2_ws/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /c16/lslidar_point_cloud -v | grep -q 'Publisher count:'" 12
+wait_for_ready "/c16/lslidar_point_cloud" "source /opt/ros/humble/setup.bash && source /home/nvidia/fastlio2_ws/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /c16/lslidar_point_cloud -v | grep -q 'Publisher count: 1'" 12
 
 sed 's/^    map_file_name:.*$/    map_file_name: ""/' "${SLAM_TOOLBOX_CONFIG}" > "${RUNTIME_SLAM_CONFIG}"
 
@@ -79,5 +80,4 @@ run_cmd "slam_toolbox_integrated" \
    ros2 run slam_toolbox sync_slam_toolbox_node \
      --ros-args --params-file ${RUNTIME_SLAM_CONFIG}"
 
-trap cleanup INT TERM
 wait
