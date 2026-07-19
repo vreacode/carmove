@@ -560,6 +560,60 @@ select {
   text-align: right;
 }
 
+.mobile-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin-bottom: 16px;
+  border: 1px solid var(--mobile-line);
+  background: var(--mobile-line);
+}
+
+.mobile-mode-switch button {
+  min-height: 53px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  border: 0;
+  padding: 9px 11px;
+  color: var(--mobile-muted);
+  background: var(--mobile-panel);
+  cursor: pointer;
+  text-align: left;
+}
+
+.mobile-mode-switch button:hover:not(:disabled) {
+  background: var(--mobile-panel-raised);
+}
+
+.mobile-mode-switch button.is-active {
+  color: var(--mobile-ink);
+  background: rgba(217, 255, 87, 0.12);
+  box-shadow: inset 3px 0 0 var(--mobile-acid);
+}
+
+.mobile-mode-switch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.mobile-mode-switch strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mobile-mode-switch small {
+  color: var(--mobile-dim);
+  font-family: var(--mobile-mono);
+  font-size: 9px;
+}
+
+.mobile-mode-switch button.is-active small {
+  color: var(--mobile-acid);
+}
+
 .mobile-form-grid {
   display: grid;
   gap: 12px;

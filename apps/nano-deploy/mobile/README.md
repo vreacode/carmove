@@ -19,7 +19,7 @@ http://100.x.y.z:8080
    ```
 
 4. 登录 Dashboard 使用 `.env` 中的 `AUTH_USERNAME` 和 `AUTH_PASSWORD`。
-5. 先打开“监控”确认小车在线，再回到“采集”测试实时画面、单帧快照和 1 分钟采集。
+5. 先打开“监控”确认小车在线，再回到“采集”测试可见光/红外切换、实时画面、单帧快照和 1 分钟采集。
 
 如果 Dashboard 和 Agent 分开运行，Dashboard 的 `.env` 需要把 `TAILSCALE_HOST` 设置成 Agent 的 Tailscale IP；手机地址仍然填写 Dashboard 所在设备的 Tailscale IP。
 
