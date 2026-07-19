@@ -74,6 +74,7 @@
 70. 从运行中的 8080 页面实际抓取并检查 JS 资产：违停配置、云台“回中”、左转和右转文案均已上线，确认板端前端构建产物包含本轮功能。
 71. 完成 GitHub 同步边界审计：本地 `main` 比 `origin/main` 多 69 个提交，最近 8 个提交只改了本报告；吊舱手册 PDF 保持未跟踪，Git 中没有图片、视频、权重或 `.env`，因此交付摘要不把本地提交误写成远端已推送。
 72. 完成训练流程文档审计：`docs/09-yolo-training.md` 仍示范直接调用 `yolov5/train.py`，会绕过当前 `tools/run_yolov5_baseline.sh` 的本地权重和数据集闸门；后续训练应以包装脚本为唯一入口，文档修订列为维护项。
+73. 对 `tools/run_yolov5_baseline.sh` 做实际安全闸门烟测：`bash -n` 通过，传入不存在的数据集/权重时返回码 `2` 并在训练进程创建前拒绝；只匹配 `yolov5/train.py` 的残留检查为空。
 
 ## 测试结果
 
@@ -144,6 +145,7 @@ final handoff report integrity audit: passed (completed items 1–67 sequential,
 live dashboard asset audit: passed (8080 JS asset contains parking UI, gimbal center, left and right controls)
 github sync boundary audit: recorded (local main ahead of origin/main by 69; latest 8 commits report-only; manual PDF untracked; no tracked media/weights/.env)
 training documentation parity audit: follow-up required (docs/09 direct train command bypasses current local-weight/dataset gate; use tools/run_yolov5_baseline.sh for actual training)
+training wrapper gate smoke: passed (bash -n=0, missing dataset/weights rejected with exit_code=2 before spawn, no yolov5/train.py process)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
