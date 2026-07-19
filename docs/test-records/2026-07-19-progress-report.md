@@ -63,6 +63,7 @@
 59. 完成公开数据集预研但未下载：确定 TACO 适合作为垃圾背景/类别映射参考，BDD100K 和 Open Images V7 适合作为车辆泛化预训练参考；许可、来源元数据和本车场景域差异必须单独保留，不能替代本车验证集。
 60. 完成类别定义一致性审计：数据集 YAML、采集准备工具、校验工具和数据流水线文档均保持 `0: garbage`、`1: vehicle`；`illegal_parking` 继续作为规则事件，不作为第三个检测类别。
 61. 对当前 `video1` 做限时临时采集烟测：4 秒上限内保存 2 张 JPEG，manifest 生成 2 行，图片文件均有效，退出码 `0`；临时目录自动回收，正式数据集没有新增文件。
+62. 明确公开数据导入闸门：TACO/BDD100K/Open Images 等外部标注不能直接放入当前 YOLO 目录，必须先在 staging 区完成类别映射、COCO/JSON 到 YOLO 的转换、来源许可记录和 `validate_yolo_dataset.py` 校验，再与本车数据分版本管理。
 
 ## 测试结果
 
@@ -123,6 +124,7 @@ gimbal safety configuration audit: follow-up required (documented default disabl
 local listener audit: passed (only Agent :9001 and Dashboard :8080; no local RTSP/gimbal/base/navigation listener; both service main statuses 0)
 dataset class-order audit: passed (all current YAML/tools/docs use 0=garbage, 1=vehicle; illegal_parking remains rule event)
 temporary RTSP capture smoke: passed (video1, 4s limit, 2 JPEGs, 2 manifest rows, exit_code=0, temporary output only)
+public-data import gate: defined (source/license metadata, class mapping, COCO/JSON→YOLO conversion, validator pass, and separate local validation split required before import)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
