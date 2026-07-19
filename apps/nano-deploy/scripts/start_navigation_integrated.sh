@@ -50,8 +50,6 @@ cleanup() {
     done < "${PID_FILE}"
     rm -f "${PID_FILE}"
   fi
-  pkill -f "nav2_bringup bringup_launch.py" 2>/dev/null || true
-  pkill -f "pointcloud_to_laserscan_node.*scan:=/scan" 2>/dev/null || true
 }
 
 run_cmd() {
