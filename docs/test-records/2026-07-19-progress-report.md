@@ -70,6 +70,7 @@
 66. 完成 3 分钟服务稳定性观察：每 30 秒共 6 次检查，Agent/Dashboard 始终 `active`，8080/9001 健康接口均 HTTP 200；排除观察脚本自身和父进程后，真实模型/底盘/导航/雷达残留数为 0。
 67. 整理中午交付摘要：软件链路、服务稳定性和安全闸门已有证据；现场数据仍是 5 张未标注单场景图，未宣称模型精度；云台 `motion_enabled=true` 的配置差异和 ZT6 过期文档描述已标记为人工复核项。
 68. 对加入交付摘要后的最终报告再次做章节完整性检查：完成项连续 1–67，优先级连续 1–5，代码围栏闭合。
+69. 完成 5 分钟服务稳定性观察：每 30 秒共 10 次检查，Agent/Dashboard 始终 `active`，8080/9001 全部 HTTP 200，排除观察进程后真实模型/底盘/导航/雷达残留始终为 0。
 
 ## 测试结果
 
@@ -136,6 +137,7 @@ morning regression and dataset boundary audit: passed (34 tests; formal dataset 
 progress report integrity audit: passed (completed items 1–64 sequential, priorities 1–5 sequential, code fences balanced; section-scoped check)
 final handoff report integrity audit: passed (completed items 1–67 sequential, priorities 1–5 sequential, code fences balanced)
 3-minute service stability watch: passed (6/6 samples active, health 8080/9001=200, true residual count=0 after excluding watcher process)
+5-minute service stability watch: passed (10/10 samples active, health 8080/9001=200, true residual count=0)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
@@ -169,7 +171,7 @@ ZT6 read-only status: connected=true
 
 本次新增的底盘启动参数修复已保留在 `ros2/vehicle/turn_on_wheeltec_robot/launch/base_serial.launch.py`；实际底盘基础链路短测结束后已停止，当前不留底盘进程。
 
-## 中午交付摘要（截至 10:14）
+## 中午交付摘要（截至 10:21）
 
 - 已完成：ROS/RTSP/YOLO 受控链路、Dashboard/Agent、停车规则、数据集闸门、服务稳定性和部署一致性核验；当前 34 项依赖轻量单测通过。
 - 未完成：本车垃圾/车辆现场采集、标注、训练和 Precision/Recall/mAP/FPS 结果；当前数据不足以启动训练。
