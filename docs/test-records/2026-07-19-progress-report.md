@@ -84,6 +84,7 @@
 80. 重新运行完整单元测试套件：10 组、共 34 个测试全部通过；本轮未改动源代码。
 81. 10:32:43–10:34:13 做 4 次、间隔 30 秒的稳定性观察：两项用户服务均持续 `active`，8080/9001 均返回 HTTP 200，目标模型/ROS/雷达真实残留持续为 0。
 82. 只读复核当前视频链路：`video1` 为 HEVC 1920×1080@30，`video2` 为 HEVC 640×512@30；正式 manifest 仍只有 5 张、1 个场景/日期组，工具继续判定暂不适合做有意义的 train/val 划分。
+83. 只读核对目录中的 ZT6 手册：官方 SDK 接口为 UDP/TCP `37260`，`0x08` 为一键回中、`0x0D` 为姿态查询、`0x0E` 为角度控制；手册默认地址 `192.168.144.25` 与当前 RTSP 地址 `10.16.16.10` 不同，已登记为后续链路核对项，本轮未发送任何控制包。
 
 ## 测试结果
 
@@ -164,6 +165,7 @@ final service/residual check: passed (10:31 CST; 2 user services active, 2 healt
 full unit suite: passed (34 tests across 10 groups)
 two-minute stability watch: passed (4/4 samples; services active, health 200, true residual count 0)
 live RTSP format probe: passed (video1 HEVC 1920x1080@30; video2 HEVC 640x512@30; read-only)
+ZT6 manual SDK audit: recorded (UDP/TCP 37260; CMD 0x08 center, 0x0D attitude, 0x0E angle; address discrepancy requires follow-up)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
