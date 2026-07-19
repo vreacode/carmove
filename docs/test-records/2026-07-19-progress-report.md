@@ -33,6 +33,7 @@
 29. 为 YOLO RTSP 推理脚本增加 `--max-frames`、`--duration` 和完成时 FPS 日志；仓库与当前部署版本均具备这些受控 benchmark 参数（两份脚本原有停车规则代码仍保持各自现状）。
 30. 修复 CUDA FP16 预热输入类型不匹配，并为 RTSP 读取线程增加包含异常路径的有序关闭；板端实际用 `helmet.pt`、可见光 `video1`、CUDA FP16 跑 3 帧，完成日志为 `3.26 FPS`、退出码 `0`，无事件文件和残留推理进程；随后 2 帧复测同样以退出码 `0` 完成。
 31. 将统一单测脚本改为在板端存在部署 `.venv` 时自动选用它；本轮复跑全部通过，系统 Python 不再因缺少可选测试依赖而误报失败。
+32. 在线通过 Agent API 启动并停止 `helmet` 模型（可见光 RTSP、FP16、事件过滤关闭），启动/停止均返回 HTTP 200，最终 `running=false`，未残留推理进程；底盘和云台仍未启动/控制。
 
 ## 测试结果
 
@@ -65,6 +66,7 @@ RTSP timed-capture syntax/tests: passed
 RTSP timed-capture smoke test: passed (1.2s limit, 3 temporary frames, not added to dataset)
 YOLO inference bounded-run syntax: passed (bounded options present in repo and deployed scripts)
 YOLO FP16 RTSP benchmark: passed (3 frames, 3.26 FPS, exit_code=0, no event output or lingering inference process)
+Dashboard → Agent model lifecycle: passed (helmet FP16 start/stop HTTP 200, final running=false, no lingering inference process)
 aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
