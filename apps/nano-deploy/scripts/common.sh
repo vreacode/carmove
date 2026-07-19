@@ -89,17 +89,6 @@ stop_component() {
   fi
 }
 
-stop_by_pattern() {
-  local pattern="$1"
-  local label="$2"
-  if pgrep -f "${pattern}" >/dev/null 2>&1; then
-    log "stopping stale ${label} by pattern"
-    pkill -TERM -f "${pattern}" >/dev/null 2>&1 || true
-    sleep 1
-    pkill -KILL -f "${pattern}" >/dev/null 2>&1 || true
-  fi
-}
-
 wait_for_http() {
   local url="$1"
   local label="$2"
