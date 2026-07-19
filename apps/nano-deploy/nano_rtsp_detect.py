@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import logging
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import cv2
@@ -227,6 +228,17 @@ def write_atomic_json(path, payload):
     tmp_path.replace(path)
 
 
+@contextmanager
+def close_dataset_after_run(dataset):
+    """Always release stream readers, including when inference raises."""
+    try:
+        yield
+    finally:
+        close_dataset = getattr(dataset, "close", None)
+        if close_dataset is not None:
+            close_dataset()
+
+
 def main():
     args = parse_args()
     if args.max_frames < 0:
@@ -277,7 +289,7 @@ def main():
     last_emit = {}
     processed_frames = 0
     started_at = time.monotonic()
-    with torch.no_grad():
+    with torch.no_grad(), close_dataset_after_run(dataset):
         for item in dataset:
             if args.max_frames and processed_frames >= args.max_frames:
                 break
@@ -387,9 +399,6 @@ def main():
                 if cv2.waitKey(1) == ord("q"):
                     break
 
-    close_dataset = getattr(dataset, "close", None)
-    if close_dataset is not None:
-        close_dataset()
     if predictor.view_img:
         cv2.destroyAllWindows()
 
