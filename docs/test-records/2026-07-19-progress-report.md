@@ -44,6 +44,7 @@
 40. 将仓库已有的车辆停留/禁停区域规则同步到板端部署：新增 `vision.event_rules` 导入、`--parking-zone` 等参数和 `EVENT_JSON` 输出；板端规则单测通过，启用停车参数的 1 秒 RTSP 短测退出码 `0`、无残留。该次使用 `helmet.pt`，只证明链路，不代表车辆检测精度。
 41. 同步板端 Agent 的 `ModelStartRequest` 和运行命令转发逻辑；在线 API 传入禁停区域后，启动/停止均 HTTP 200，返回命令确认包含 `--parking-zone` 与 `--parking-dwell`，最终 `running=false`、无推理残留。
 42. 补齐 Dashboard Server 的停车参数 schema；通过 `/api/model/start` → Agent → RTSP 实测启动/停止均 HTTP 200，命令确认停车参数已透传，最终 `running=false`，Dashboard 健康检查 HTTP 200。
+43. 对修复后的默认降帧路径做 10 秒资源基线：`vid_stride=5` 处理 57 帧（`5.64 FPS`）、退出码 `0`，RAM 峰值约 `3.93/7.62 GB`、单核 CPU 峰值约 `86%`、最高温度约 `60.2°C`，结束后无推理残留。
 
 ## 测试结果
 
@@ -87,6 +88,7 @@ YOLO new-frame/stride test: passed (stride=1: 66 frames/3.05s; stride=5: 15 fram
 deployed illegal-parking rule integration: passed (rule smoke, parking CLI help, 1s RTSP run exit_code=0; no residual process; no accuracy claim)
 Dashboard → Agent → parking arguments: passed (start/stop HTTP 200, both parking flags forwarded, final running=false)
 Dashboard Server → Agent parking forwarding: passed (API start/stop HTTP 200, parking flags forwarded, final running=false, health=200)
+YOLO stride-5 resource baseline: recorded (10s, 57 frames/5.64 FPS, RAM ~3.93/7.62 GB peak, per-core CPU ~86% peak, temperature ~60.2°C, no residual process)
 aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
