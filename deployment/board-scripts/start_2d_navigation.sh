@@ -10,13 +10,6 @@ cleanup() {
       kill -INT "${line#*:}" 2>/dev/null || true
     done < "$PID_FILE"
   fi
-  pkill -f nav2_bringup || true
-  pkill -f amcl || true
-  pkill -f map_server || true
-  pkill -f nav2_map_server || true
-  pkill -f pointcloud_to_laserscan || true
-  pkill -f lslidar || true
-  pkill -f turn_on_wheeltec_robot || true
 }
 
 if [[ "${1:-}" == "stop" ]]; then

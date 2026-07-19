@@ -19,6 +19,7 @@
 15. 为预览叠加层增加 2 个无依赖单测，确认 `q` 退出和倒计时显示路径正常。
 16. 新增 `tools/run_yolov5_baseline.sh` 训练入口：训练前强制校验数据集和本地权重，禁止隐式下载，避免无标签数据误启动训练。
 17. 完成仓库产物审计：当前没有本地训练权重，正式数据仍只有 5 张基线图，Git 未跟踪 `.env`、录像、图片或模型权重；Dashboard 两项用户服务保持 active。
+18. 修复建图/导航脚本的进程清理方式：移除模糊 `pkill -f`，改为只向本脚本 PID 文件记录的进程发送停止信号，避免误杀同机其他 ROS 实例。
 
 ## 测试结果
 
@@ -34,6 +35,7 @@ capture manifest report tests: 2 passed
 capture preview tests: 2 passed
 YOLOv5 training gate smoke test: passed (missing dataset rejected before training)
 repository artifact audit: passed (no tracked secrets/media/weights)
+mapping/navigation cleanup audit: passed (`bash -n`, PID-file-only cleanup)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
