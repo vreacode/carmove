@@ -35,6 +35,11 @@ class ModelStartRequest(BaseModel):
     view: bool = False
     annotate: bool = True
     event_classes: str = ""
+    parking_zone: list[float] | None = Field(default=None, min_length=4, max_length=4)
+    parking_dwell_seconds: float = Field(default=5.0, ge=0.0, le=3600.0)
+    parking_cooldown_seconds: float = Field(default=30.0, ge=0.0, le=3600.0)
+    parking_min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    parking_track_iou: float = Field(default=0.3, gt=0.0, le=1.0)
 
 
 class ControlRequest(BaseModel):
