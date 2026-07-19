@@ -87,6 +87,7 @@
 83. 只读核对目录中的 ZT6 手册：官方 SDK 接口为 UDP/TCP `37260`，`0x08` 为一键回中、`0x0D` 为姿态查询、`0x0E` 为角度控制；手册默认地址 `192.168.144.25` 与当前 RTSP 地址 `10.16.16.10` 不同，已登记为后续链路核对项，本轮未发送任何控制包。
 84. 只读核对网络路由：板载 `eno1=10.16.16.2/24` 直连 `10.16.16.10`，当前 RTSP 摄像头明确走网口；手册默认地址 `192.168.144.25` 会走 Wi‑Fi 网关，不能直接当作当前控制地址。
 85. 静态接入审计确认项目代码已将 SDK 配置为当前直连地址 `10.16.16.10:37260`，并实现手册对应的回中/姿态/角度命令；因此手册地址差异属于默认部署示例差异，不是当前代码缺陷。
+86. 只读查询 ZT6 当前状态成功：在线，板端固件 `0.1.9`、云台固件 `0.2.3`，工作模式 `follow`、安装方向 normal、姿态约 `(0°, 0°, 0°)`；状态显示未插 TF 卡，但 RTSP 拉流正常；硬件 ID 未写入报告。
 
 ## 测试结果
 
@@ -170,6 +171,7 @@ live RTSP format probe: passed (video1 HEVC 1920x1080@30; video2 HEVC 640x512@30
 ZT6 manual SDK audit: recorded (UDP/TCP 37260; CMD 0x08 center, 0x0D attitude, 0x0E angle; address discrepancy requires follow-up)
 network route audit: recorded (eno1 10.16.16.2/24 -> 10.16.16.10; manual default 192.168.144.25 routes via Wi-Fi)
 project SDK wiring audit: passed (runtime/config host 10.16.16.10:37260 and documented command mapping present)
+ZT6 live read-only status: passed (connected; firmware code 0.1.9/gimbal 0.2.3; follow/normal; no TF card; no motion command)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
