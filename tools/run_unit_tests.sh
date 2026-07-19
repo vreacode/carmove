@@ -16,3 +16,4 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
   "$PYTHON_BIN" -m unittest dashboard_platform.agent.test_motion
   "$PYTHON_BIN" -m unittest dashboard_platform.agent.test_runtime
 )
+"$PYTHON_BIN" -m unittest tools.test_validate_ros_map
