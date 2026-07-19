@@ -68,6 +68,7 @@
 64. 上午回归验收再次通过全部 34 项依赖轻量单测；正式数据集文件数量保持 6 个（5 张图片、1 个 manifest、0 个标签），没有把临时采集或外部数据混入仓库数据集。
 65. 完成进度报告完整性审计：`本次完成` 编号连续 1–64，`下一步优先级` 编号连续 1–5，Markdown 代码围栏成对闭合；前一次误报来自把不同章节的编号合并统计，已修正检查口径。
 66. 完成 3 分钟服务稳定性观察：每 30 秒共 6 次检查，Agent/Dashboard 始终 `active`，8080/9001 健康接口均 HTTP 200；排除观察脚本自身和父进程后，真实模型/底盘/导航/雷达残留数为 0。
+67. 整理中午交付摘要：软件链路、服务稳定性和安全闸门已有证据；现场数据仍是 5 张未标注单场景图，未宣称模型精度；云台 `motion_enabled=true` 的配置差异和 ZT6 过期文档描述已标记为人工复核项。
 
 ## 测试结果
 
@@ -165,3 +166,10 @@ ZT6 read-only status: connected=true
 5. 单路 RTSP 推理 benchmark 后，再与 Dashboard、雷达/IMU、导航逐级叠加。
 
 本次新增的底盘启动参数修复已保留在 `ros2/vehicle/turn_on_wheeltec_robot/launch/base_serial.launch.py`；实际底盘基础链路短测结束后已停止，当前不留底盘进程。
+
+## 中午交付摘要（截至 10:14）
+
+- 已完成：ROS/RTSP/YOLO 受控链路、Dashboard/Agent、停车规则、数据集闸门、服务稳定性和部署一致性核验；当前 34 项依赖轻量单测通过。
+- 未完成：本车垃圾/车辆现场采集、标注、训练和 Precision/Recall/mAP/FPS 结果；当前数据不足以启动训练。
+- 安全状态：底盘 stopped、`dry_run`、未 armed；无模型/ROS/运动残留。云台接口可用且当前 `motion_enabled=true`，无人值守前需人工复核该开关。
+- 你回来后的直接顺序：用 `video1 + --preview` 采集至少 3 个场景 → 标注 `garbage/vehicle` → 按 manifest 分组准备并校验 → 再启动 YOLOv5s 640 基线训练。
