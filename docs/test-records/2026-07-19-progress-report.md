@@ -58,6 +58,7 @@
 54. 重复运行只读 ROS 健康检查：底盘、雷达、IMU、`/scan`、`/map` 均未启动，RTSP 可读；Dashboard 同步确认底盘 `running=false`、控制模式 `dry_run`、`armed=false`、`manual_override=false`，符合当前安全停机基线。
 55. 只读核对云台状态接口：首次查询出现 1 次 SIYI UDP timeout，随后连续 3 次均为 `connected=true`、`motion_enabled=true`，同时 `video1` 仍可读；本轮未发送任何 `pulse`、`stop` 或 `center` 指令，云台实际运动状态未被改变。
 56. 采集板端空闲资源基线：兼容旧版 `tegrastats` 后取得 4 秒样本，RAM 约 `2.93–2.95/7.62 GB`，最高温度约 `60°C`，单核 CPU 峰值约 `75%`；采样期间无模型、ROS 或运动进程。
+57. 安全配置审计发现：文档中的云台默认值为关闭，但板端只读状态为 `motion_enabled=true`；本轮不擅自改 `.env`、不发送云台指令，已将“无人值守前人工复核该开关”列为后续安全事项。
 
 ## 测试结果
 
@@ -114,6 +115,7 @@ RTSP profile repeat audit: passed (video1 HEVC 1920×1080/30fps; video2 HEVC 640
 ROS/control read-only safety baseline: expected stopped state (ROS healthcheck pass=3/fail=8 because base topics are intentionally stopped; RTSP readable; base stopped, dry_run, disarmed, no manual override)
 ZT6 gimbal status read-only audit: transient status timeout once, then 3/3 connected; motion_enabled=true; video1 readable; no gimbal command sent
 idle resource baseline: recorded (tegrastats 4s, RAM ~2.93–2.95/7.62GB, max temperature ~60°C, peak single-core CPU ~75%, no model/ROS/motion process)
+gimbal safety configuration audit: follow-up required (documented default disabled, current board status motion_enabled=true; no config change or gimbal command made)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
