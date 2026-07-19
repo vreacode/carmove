@@ -26,6 +26,7 @@ base preflight: pass=8 warn=0 fail=0
 base runtime smoke test: passed (serial, odom, imu, tf, ekf; no cmd_vel publisher)
 RTSP capture smoke test: passed (video1, 1 frame, temporary output)
 Dashboard health: HTTP 200
+Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
 ```
 
