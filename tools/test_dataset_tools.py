@@ -34,6 +34,25 @@ class DatasetToolTests(unittest.TestCase):
             result = validate(output / "dataset.yaml", allow_missing=False)
             self.assertFalse(result["ok"], "a one-group fixture must fail because val is empty")
 
+    def test_two_groups_produce_a_train_and_validation_split(self):
+        with tempfile.TemporaryDirectory() as raw_dir, tempfile.TemporaryDirectory() as output_dir:
+            raw = Path(raw_dir)
+            manifest = raw / "capture.csv"
+            with manifest.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["frame_path", "captured_at", "scene", "source", "note"])
+                for index, scene in enumerate(("gate", "road"), start=1):
+                    source = raw / f"frame_{index}.jpg"
+                    source.write_bytes(b"fixture")
+                    source.with_suffix(".txt").write_text("0 0.5 0.5 0.2 0.2\n", encoding="utf-8")
+                    writer.writerow([str(source), f"2026-07-{17 + index}T10:00:00+08:00", scene, "rtsp://test", "fixture"])
+
+            output = Path(output_dir) / "dataset"
+            counts = prepare(read_manifest(manifest), output, val_ratio=0.5, seed=1, names=["garbage", "vehicle"])
+            self.assertEqual(counts, {"train": 1, "val": 1})
+            result = validate(output / "dataset.yaml", allow_missing=False)
+            self.assertTrue(result["ok"], result["errors"])
+
     def test_invalid_box_is_rejected(self):
         with tempfile.TemporaryDirectory() as root_dir:
             root = Path(root_dir)

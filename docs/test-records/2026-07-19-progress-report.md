@@ -18,7 +18,7 @@
 ```text
 SIYI protocol tests: 7 passed
 vision event-rule tests: 4 passed
-dataset-tool tests: 3 passed
+dataset-tool tests: 4 passed
 frontend build: passed
 base preflight: pass=8 warn=0 fail=0
 Dashboard health: HTTP 200
