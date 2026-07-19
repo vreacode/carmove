@@ -72,6 +72,7 @@
 68. 对加入交付摘要后的最终报告再次做章节完整性检查：完成项连续 1–67，优先级连续 1–5，代码围栏闭合。
 69. 完成 5 分钟服务稳定性观察：每 30 秒共 10 次检查，Agent/Dashboard 始终 `active`，8080/9001 全部 HTTP 200，排除观察进程后真实模型/底盘/导航/雷达残留始终为 0。
 70. 从运行中的 8080 页面实际抓取并检查 JS 资产：违停配置、云台“回中”、左转和右转文案均已上线，确认板端前端构建产物包含本轮功能。
+71. 完成 GitHub 同步边界审计：本地 `main` 比 `origin/main` 多 69 个提交，最近 8 个提交只改了本报告；吊舱手册 PDF 保持未跟踪，Git 中没有图片、视频、权重或 `.env`，因此交付摘要不把本地提交误写成远端已推送。
 
 ## 测试结果
 
@@ -140,6 +141,7 @@ final handoff report integrity audit: passed (completed items 1–67 sequential,
 3-minute service stability watch: passed (6/6 samples active, health 8080/9001=200, true residual count=0 after excluding watcher process)
 5-minute service stability watch: passed (10/10 samples active, health 8080/9001=200, true residual count=0)
 live dashboard asset audit: passed (8080 JS asset contains parking UI, gimbal center, left and right controls)
+github sync boundary audit: recorded (local main ahead of origin/main by 69; latest 8 commits report-only; manual PDF untracked; no tracked media/weights/.env)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
