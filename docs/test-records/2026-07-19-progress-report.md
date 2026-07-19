@@ -75,6 +75,7 @@
 71. 完成 GitHub 同步边界审计：本地 `main` 比 `origin/main` 多 69 个提交，最近 8 个提交只改了本报告；吊舱手册 PDF 保持未跟踪，Git 中没有图片、视频、权重或 `.env`，因此交付摘要不把本地提交误写成远端已推送。
 72. 完成训练流程文档审计：`docs/09-yolo-training.md` 仍示范直接调用 `yolov5/train.py`，会绕过当前 `tools/run_yolov5_baseline.sh` 的本地权重和数据集闸门；后续训练应以包装脚本为唯一入口，文档修订列为维护项。
 73. 对 `tools/run_yolov5_baseline.sh` 做实际安全闸门烟测：`bash -n` 通过，传入不存在的数据集/权重时返回码 `2` 并在训练进程创建前拒绝；只匹配 `yolov5/train.py` 的残留检查为空。
+74. 完成 CVAT 官方标注流程预研：创建任务时固定 `garbage`、`vehicle` 两个矩形框标签，导出 YOLO/Ultralytics YOLO 格式后再回到本项目校验器检查类别顺序、同名图片/标签和归一化框；不直接接受自动标注结果作为真值。
 
 ## 测试结果
 
@@ -146,6 +147,7 @@ live dashboard asset audit: passed (8080 JS asset contains parking UI, gimbal ce
 github sync boundary audit: recorded (local main ahead of origin/main by 69; latest 8 commits report-only; manual PDF untracked; no tracked media/weights/.env)
 training documentation parity audit: follow-up required (docs/09 direct train command bypasses current local-weight/dataset gate; use tools/run_yolov5_baseline.sh for actual training)
 training wrapper gate smoke: passed (bash -n=0, missing dataset/weights rejected with exit_code=2 before spawn, no yolov5/train.py process)
+CVAT annotation workflow research: recorded ([task creation](https://docs.cvat.ai/docs/manual/basics/create-annotation-task/), [YOLO format](https://docs.cvat.ai/docs/manual/advanced/formats/format-yolo/), [Ultralytics YOLO format](https://docs.cvat.ai/docs/dataset_management/formats/format-yolo-ultralytics/); fixed two labels and post-export validation required)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
