@@ -86,6 +86,7 @@
 82. 只读复核当前视频链路：`video1` 为 HEVC 1920×1080@30，`video2` 为 HEVC 640×512@30；正式 manifest 仍只有 5 张、1 个场景/日期组，工具继续判定暂不适合做有意义的 train/val 划分。
 83. 只读核对目录中的 ZT6 手册：官方 SDK 接口为 UDP/TCP `37260`，`0x08` 为一键回中、`0x0D` 为姿态查询、`0x0E` 为角度控制；手册默认地址 `192.168.144.25` 与当前 RTSP 地址 `10.16.16.10` 不同，已登记为后续链路核对项，本轮未发送任何控制包。
 84. 只读核对网络路由：板载 `eno1=10.16.16.2/24` 直连 `10.16.16.10`，当前 RTSP 摄像头明确走网口；手册默认地址 `192.168.144.25` 会走 Wi‑Fi 网关，不能直接当作当前控制地址。
+85. 静态接入审计确认项目代码已将 SDK 配置为当前直连地址 `10.16.16.10:37260`，并实现手册对应的回中/姿态/角度命令；因此手册地址差异属于默认部署示例差异，不是当前代码缺陷。
 
 ## 测试结果
 
@@ -168,6 +169,7 @@ two-minute stability watch: passed (4/4 samples; services active, health 200, tr
 live RTSP format probe: passed (video1 HEVC 1920x1080@30; video2 HEVC 640x512@30; read-only)
 ZT6 manual SDK audit: recorded (UDP/TCP 37260; CMD 0x08 center, 0x0D attitude, 0x0E angle; address discrepancy requires follow-up)
 network route audit: recorded (eno1 10.16.16.2/24 -> 10.16.16.10; manual default 192.168.144.25 routes via Wi-Fi)
+project SDK wiring audit: passed (runtime/config host 10.16.16.10:37260 and documented command mapping present)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
