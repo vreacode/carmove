@@ -72,3 +72,5 @@ python3 tools/validate_yolo_dataset.py \
 ```
 
 详细的采集、4K 母片、划分和标注约定见 `docs/08-data-pipeline.md`。
+
+标注前可用 `python3 tools/capture_manifest_report.py --manifest <采集CSV>` 检查场景/日期组、时间跨度和缺失图片。

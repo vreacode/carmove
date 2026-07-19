@@ -9,3 +9,4 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 "$PYTHON_BIN" -m unittest discover -s apps/nano-deploy/camera -p 'test_*.py'
 "$PYTHON_BIN" -m unittest discover -s apps/nano-deploy/vision -p 'test_*.py'
 "$PYTHON_BIN" -m unittest tools.test_dataset_tools
+"$PYTHON_BIN" -m unittest tools.test_capture_manifest

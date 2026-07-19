@@ -14,6 +14,16 @@
 5. 训练前运行数据集校验工具；
 6. 训练完成后记录模型、数据集版本、输入尺寸、FPS、误报和漏报。
 
+标注前可先检查采集覆盖情况：
+
+```bash
+python3 tools/capture_manifest_report.py \
+  --manifest datasets/local/roadside_v1/manifests/<capture>.csv \
+  --report datasets/local/roadside_v1/manifests/<capture>.report.json
+```
+
+它会按场景+日期统计帧数、时间跨度、采样间隔、视频源和缺失文件，并在场景组不足时给出警告。
+
 4K TF 卡录像可以作为高质量母片，用于补充远距离、小目标和遮挡样本；它不应和同一时段的 1080p 相邻帧无差别混入数据集。
 
 2026-07-19 在板上用 `ffprobe` 只读确认了当前 RTSP：

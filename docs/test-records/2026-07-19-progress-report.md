@@ -15,6 +15,7 @@
 11. 修复底盘启动文件串口参数名错误，构建 `turn_on_wheeltec_robot` 成功；短时启动验收通过，`/odom` 约 19.9 Hz、IMU/TF/EKF 正常，`/cmd_vel_nav` 发布者为 0，详见 `docs/test-records/2026-07-19-base-runtime.md`。
 12. 使用当前 ZT6 可见光 RTSP 实际抓取 1 帧到临时目录，采集脚本、OpenCV/HEVC 解码和 CSV manifest 均正常；探测帧未写入正式数据集。
 13. 复核现有 5 张基线图片：属于单一室内导航测试场景，暂不纳入垃圾/车辆训练集，详见 `docs/test-records/2026-07-19-data-review.md`。
+14. 新增 `tools/capture_manifest_report.py`，可在标注前统计场景/日期组、帧数、时间跨度、采样间隔和缺失文件；对当前基线正确提示“单组数据不可做有意义的 train/val 划分”。
 
 ## 测试结果
 
@@ -26,6 +27,7 @@ frontend build: passed
 base preflight: pass=8 warn=0 fail=0
 base runtime smoke test: passed (serial, odom, imu, tf, ekf; no cmd_vel publisher)
 RTSP capture smoke test: passed (video1, 1 frame, temporary output)
+capture manifest report tests: 2 passed
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
