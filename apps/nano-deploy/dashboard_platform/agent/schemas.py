@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoginlessAck(BaseModel):
@@ -28,6 +28,17 @@ class ModelStartRequest(BaseModel):
     parking_cooldown_seconds: float = Field(default=30.0, ge=0.0, le=3600.0)
     parking_min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     parking_track_iou: float = Field(default=0.3, gt=0.0, le=1.0)
+
+    @field_validator("parking_zone")
+    @classmethod
+    def validate_parking_zone(cls, value: list[float] | None) -> list[float] | None:
+        if value is None:
+            return value
+        if any(coordinate < 0.0 or coordinate > 1.0 for coordinate in value):
+            raise ValueError("parking_zone coordinates must be normalized to [0, 1]")
+        if value[0] >= value[2] or value[1] >= value[3]:
+            raise ValueError("parking_zone must have positive area")
+        return value
 
 
 class ControlRequest(BaseModel):
