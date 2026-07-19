@@ -65,6 +65,7 @@
 61. 对当前 `video1` 做限时临时采集烟测：4 秒上限内保存 2 张 JPEG，manifest 生成 2 行，图片文件均有效，退出码 `0`；临时目录自动回收，正式数据集没有新增文件。
 62. 明确公开数据导入闸门：TACO/BDD100K/Open Images 等外部标注不能直接放入当前 YOLO 目录，必须先在 staging 区完成类别映射、COCO/JSON 到 YOLO 的转换、来源许可记录和 `validate_yolo_dataset.py` 校验，再与本车数据分版本管理。
 63. 完成 ZT6 文档与实现一致性审计：`docs/07-siyi-zt6.md` 末尾仍保留“没有公开云台运动接口”的过期描述，而 Agent 实际已有受保护的 `pulse/stop/center` 端点；本轮不改第二个 Markdown 文件，已将该文档修订列为后续维护项。
+64. 上午回归验收再次通过全部 34 项依赖轻量单测；正式数据集文件数量保持 6 个（5 张图片、1 个 manifest、0 个标签），没有把临时采集或外部数据混入仓库数据集。
 
 ## 测试结果
 
@@ -127,6 +128,7 @@ dataset class-order audit: passed (all current YAML/tools/docs use 0=garbage, 1=
 temporary RTSP capture smoke: passed (video1, 4s limit, 2 JPEGs, 2 manifest rows, exit_code=0, temporary output only)
 public-data import gate: defined (source/license metadata, class mapping, COCO/JSON→YOLO conversion, validator pass, and separate local validation split required before import)
 ZT6 documentation parity audit: follow-up required (docs/07 still says motion API is not public; Agent exposes protected pulse/stop/center endpoints; no source or second Markdown edited this round)
+morning regression and dataset boundary audit: passed (34 tests; formal dataset 6 files/5 images/0 labels/1 manifest; no temporary or public data imported)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
