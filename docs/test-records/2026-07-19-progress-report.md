@@ -83,6 +83,7 @@
 79. 10:31 收尾核验：`nano-board-agent` 与 `nano-dashboard-server` 均为 `active`，8080/9001 健康检查均 HTTP 200；目标模型、ROS、雷达等真实残留进程数为 0。
 80. 重新运行完整单元测试套件：10 组、共 34 个测试全部通过；本轮未改动源代码。
 81. 10:32:43–10:34:13 做 4 次、间隔 30 秒的稳定性观察：两项用户服务均持续 `active`，8080/9001 均返回 HTTP 200，目标模型/ROS/雷达真实残留持续为 0。
+82. 只读复核当前视频链路：`video1` 为 HEVC 1920×1080@30，`video2` 为 HEVC 640×512@30；正式 manifest 仍只有 5 张、1 个场景/日期组，工具继续判定暂不适合做有意义的 train/val 划分。
 
 ## 测试结果
 
@@ -162,6 +163,7 @@ field capture recipe: recorded (video1 + --preview + scene/note; shell backslash
 final service/residual check: passed (10:31 CST; 2 user services active, 2 health endpoints HTTP 200, true residual count 0)
 full unit suite: passed (34 tests across 10 groups)
 two-minute stability watch: passed (4/4 samples; services active, health 200, true residual count 0)
+live RTSP format probe: passed (video1 HEVC 1920x1080@30; video2 HEVC 640x512@30; read-only)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
