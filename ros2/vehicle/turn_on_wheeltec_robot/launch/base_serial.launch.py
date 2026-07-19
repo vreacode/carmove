@@ -20,7 +20,7 @@ def generate_launch_description():
         name='wheeltec_robot', # Added name for clarity, assuming it was missing in the snippet
         output='screen',
         remappings=[('/cmd_vel', '/cmd_vel_nav')],
-        parameters=[{'serial_port': '/dev/ttyCH343USB0', # 大车串口
+        parameters=[{'usart_port_name': '/dev/ttyCH343USB0', # 大车串口；驱动实际读取此参数
                     'serial_baud_rate': 115200,
                     'robot_frame_id': 'base_footprint',
                     'odom_frame_id': 'odom_combined',
