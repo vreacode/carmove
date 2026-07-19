@@ -52,6 +52,7 @@
 48. 对本轮同步的推理脚本、数据流、事件规则、Agent 和 Server 做仓库/板端差异审计，均完全一致；板端 Dashboard `App.tsx` 保留既有云台/布局定制，仅确认停车配置已构建并上线。
 49. 增加申报材料事实素材提纲，按“算法、平台、数据集”分层整理已验证能力，并明确当前没有垃圾/车辆模型精度结论，待标注训练后补齐 Precision、Recall、mAP 和 Jetson FPS。
 50. 为 Dashboard Server 的同名请求 schema 增加 2 项回归单测，确认无效 ROI 在转发到 Agent 前被拒绝；全量依赖轻量单测增至 34 项并通过。
+51. 在当前运行版本上做只读回归：34 项单测、Python 编译、核心部署副本一致性均通过；在线登录 HTTP 200，越界/反向/错误长度 ROI 均 HTTP 422，模型保持停止、相机连接正常。
 
 ## 测试结果
 
@@ -102,6 +103,7 @@ parking ROI schema tests: passed (3 tests)
 Dashboard Server parking schema tests: passed (2 tests)
 deployment parity audit: passed (inference/data/event/Agent/Server files match; board App.tsx intentional customization retained)
 aggregate dependency-light unit tests: 34 passed (deployment venv auto-selected)
+current-version read-only regression: passed (34 tests, Python compile, core parity; login=200, invalid ROI=422×3, model running=false, camera connected=true)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
