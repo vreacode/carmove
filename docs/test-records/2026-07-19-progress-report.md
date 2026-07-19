@@ -28,6 +28,7 @@
 24. 运行导航入口 `check gmap_map` 只读 preflight：地图和 Nav2 参数文件存在，但因底盘未启动而在 `wheeltec_robot not ready` 处安全退出，没有启动导航进程。
 25. 清理 Demo/遗留 GMapping 脚本中的全局 `pkill -f`；Demo 停止流程现在只按自身 PID 文件停止，旧 GMapping 入口不再全局清理 ROS 进程。
 26. 新增 `tools/validate_ros_map.py`，在导航前检查地图 YAML 必填字段、相对 PGM 路径、PGM 头、分辨率、原点和阈值；新增 3 个地图预检单测。
+27. 将地图预检接入仓库和实际部署的导航 `check` 入口；地图内容校验通过后才会继续检查底盘、里程计和雷达就绪状态。
 
 ## 测试结果
 
@@ -54,6 +55,8 @@ navigation preflight: expected refusal while base stopped (`wheeltec_robot not r
 legacy/demo cleanup audit: passed (no global `pkill -f` in maintained stop/start paths)
 ROS map preflight tests: 3 passed
 ROS map preflight: `gmap_map.yaml` passed (PGM 2016×608, resolution 0.05 m)
+navigation map-gate integration: passed (repo and deployed `check` scripts include map validator)
+navigation `check gmap_map`: map gate passed, then correctly refused at `wheeltec_robot not ready`; no navigation process started
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true

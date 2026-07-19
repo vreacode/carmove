@@ -7,6 +7,7 @@ PID_DIR="${ROOT_DIR}/dashboard_platform/runtime/pids"
 PID_FILE="${PID_DIR}/navigation_integrated.pids"
 MAP_DIR="/home/nvidia/Desktop/wheeltec_ros2/maps"
 PARAMS_FILE="/home/nvidia/Desktop/wheeltec_ros2/src/wheeltec_robot_nav2/param/wheeltec_params/param_top_akm_dl.yaml"
+MAP_VALIDATOR="/home/nvidia/carmove/tools/validate_ros_map.py"
 
 mkdir -p "${LOG_DIR}" "${PID_DIR}"
 
@@ -36,6 +37,11 @@ preflight() {
     echo "Map not found: ${map_file}" >&2
     return 1
   fi
+  if [[ ! -f "${MAP_VALIDATOR}" ]]; then
+    echo "Map validator not found: ${MAP_VALIDATOR}" >&2
+    return 1
+  fi
+  python3 "${MAP_VALIDATOR}" --map "${map_file}" >/dev/null
 
   wait_for_ready "wheeltec_robot" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 node list | grep -q '^/wheeltec_robot$'" 12
   wait_for_ready "/odom" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /odom -v | grep -q 'Publisher count: 1'" 12
