@@ -78,6 +78,7 @@
 74. 完成 CVAT 官方标注流程预研：创建任务时固定 `garbage`、`vehicle` 两个矩形框标签，导出 YOLO/Ultralytics YOLO 格式后再回到本项目校验器检查类别顺序、同名图片/标签和归一化框；不直接接受自动标注结果作为真值。
 75. 用临时目录模拟 CVAT YOLO 导出做兼容性验收：`0: garbage` 和 `1: vehicle` 各 1 个框，train/val 各 1 张图，项目校验器返回 `ok=true` 且无错误；正式数据集未写入。
 76. 用三个模拟场景/日期组验证 `assign_splits`：同一组保持完整不拆分，结果为 2 组 train、1 组 val；这条规则适合现场按“场景 + 日期”采集后再划分，正式数据集未改变。
+77. 补齐公开数据格式差异记录：TACO 主要是 COCO 分割标注，需先做类别合并和分割框转换；BDD100K 是道路目标 JSON，需将 `car` 等类别映射为 `vehicle`；Open Images 是类别/框标注表，需筛选目标、下载并核对许可；三者均不能直接绕过当前 manifest→YOLO 流水线。
 
 ## 测试结果
 
@@ -152,6 +153,7 @@ training wrapper gate smoke: passed (bash -n=0, missing dataset/weights rejected
 CVAT annotation workflow research: recorded ([task creation](https://docs.cvat.ai/docs/manual/basics/create-annotation-task/), [YOLO format](https://docs.cvat.ai/docs/manual/advanced/formats/format-yolo/), [Ultralytics YOLO format](https://docs.cvat.ai/docs/dataset_management/formats/format-yolo-ultralytics/); fixed two labels and post-export validation required)
 CVAT-to-project validator compatibility: passed (temporary YOLO fixture, train/val each 1 image, classes garbage/vehicle, 2 objects, no errors, no formal dataset change)
 grouped split smoke: passed (3 scene/date groups stay intact; 2 train groups and 1 val group; formal dataset unchanged)
+public label-format audit: recorded (TACO COCO segmentation, BDD100K JSON, Open Images box tables require explicit conversion/mapping/license handling before current YOLO pipeline)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
