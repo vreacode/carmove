@@ -67,6 +67,7 @@
 63. 完成 ZT6 文档与实现一致性审计：`docs/07-siyi-zt6.md` 末尾仍保留“没有公开云台运动接口”的过期描述，而 Agent 实际已有受保护的 `pulse/stop/center` 端点；本轮不改第二个 Markdown 文件，已将该文档修订列为后续维护项。
 64. 上午回归验收再次通过全部 34 项依赖轻量单测；正式数据集文件数量保持 6 个（5 张图片、1 个 manifest、0 个标签），没有把临时采集或外部数据混入仓库数据集。
 65. 完成进度报告完整性审计：`本次完成` 编号连续 1–64，`下一步优先级` 编号连续 1–5，Markdown 代码围栏成对闭合；前一次误报来自把不同章节的编号合并统计，已修正检查口径。
+66. 完成 3 分钟服务稳定性观察：每 30 秒共 6 次检查，Agent/Dashboard 始终 `active`，8080/9001 健康接口均 HTTP 200；排除观察脚本自身和父进程后，真实模型/底盘/导航/雷达残留数为 0。
 
 ## 测试结果
 
@@ -131,6 +132,7 @@ public-data import gate: defined (source/license metadata, class mapping, COCO/J
 ZT6 documentation parity audit: follow-up required (docs/07 still says motion API is not public; Agent exposes protected pulse/stop/center endpoints; no source or second Markdown edited this round)
 morning regression and dataset boundary audit: passed (34 tests; formal dataset 6 files/5 images/0 labels/1 manifest; no temporary or public data imported)
 progress report integrity audit: passed (completed items 1–64 sequential, priorities 1–5 sequential, code fences balanced; section-scoped check)
+3-minute service stability watch: passed (6/6 samples active, health 8080/9001=200, true residual count=0 after excluding watcher process)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
