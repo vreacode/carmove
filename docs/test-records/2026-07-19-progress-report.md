@@ -77,6 +77,7 @@
 73. 对 `tools/run_yolov5_baseline.sh` 做实际安全闸门烟测：`bash -n` 通过，传入不存在的数据集/权重时返回码 `2` 并在训练进程创建前拒绝；只匹配 `yolov5/train.py` 的残留检查为空。
 74. 完成 CVAT 官方标注流程预研：创建任务时固定 `garbage`、`vehicle` 两个矩形框标签，导出 YOLO/Ultralytics YOLO 格式后再回到本项目校验器检查类别顺序、同名图片/标签和归一化框；不直接接受自动标注结果作为真值。
 75. 用临时目录模拟 CVAT YOLO 导出做兼容性验收：`0: garbage` 和 `1: vehicle` 各 1 个框，train/val 各 1 张图，项目校验器返回 `ok=true` 且无错误；正式数据集未写入。
+76. 用三个模拟场景/日期组验证 `assign_splits`：同一组保持完整不拆分，结果为 2 组 train、1 组 val；这条规则适合现场按“场景 + 日期”采集后再划分，正式数据集未改变。
 
 ## 测试结果
 
@@ -150,6 +151,7 @@ training documentation parity audit: follow-up required (docs/09 direct train co
 training wrapper gate smoke: passed (bash -n=0, missing dataset/weights rejected with exit_code=2 before spawn, no yolov5/train.py process)
 CVAT annotation workflow research: recorded ([task creation](https://docs.cvat.ai/docs/manual/basics/create-annotation-task/), [YOLO format](https://docs.cvat.ai/docs/manual/advanced/formats/format-yolo/), [Ultralytics YOLO format](https://docs.cvat.ai/docs/dataset_management/formats/format-yolo-ultralytics/); fixed two labels and post-export validation required)
 CVAT-to-project validator compatibility: passed (temporary YOLO fixture, train/val each 1 image, classes garbage/vehicle, 2 objects, no errors, no formal dataset change)
+grouped split smoke: passed (3 scene/date groups stay intact; 2 train groups and 1 val group; formal dataset unchanged)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
