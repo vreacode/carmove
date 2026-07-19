@@ -53,6 +53,7 @@
 49. 增加申报材料事实素材提纲，按“算法、平台、数据集”分层整理已验证能力，并明确当前没有垃圾/车辆模型精度结论，待标注训练后补齐 Precision、Recall、mAP 和 Jetson FPS。
 50. 为 Dashboard Server 的同名请求 schema 增加 2 项回归单测，确认无效 ROI 在转发到 Agent 前被拒绝；全量依赖轻量单测增至 34 项并通过。
 51. 在当前运行版本上做只读回归：34 项单测、Python 编译、核心部署副本一致性均通过；在线登录 HTTP 200，越界/反向/错误长度 ROI 均 HTTP 422，模型保持停止、相机连接正常。
+52. 对现有 `baseline_20260717.csv` 做只读数据审计：5 帧均为 1920×1080、文件完整，属于单一 `nav_test_day__2026-07-17` 分组，且 0 个相邻标签；工具正确警告当前不能进行有意义的 train/val 划分。
 
 ## 测试结果
 
@@ -104,6 +105,7 @@ Dashboard Server parking schema tests: passed (2 tests)
 deployment parity audit: passed (inference/data/event/Agent/Server files match; board App.tsx intentional customization retained)
 aggregate dependency-light unit tests: 34 passed (deployment venv auto-selected)
 current-version read-only regression: passed (34 tests, Python compile, core parity; login=200, invalid ROI=422×3, model running=false, camera connected=true)
+capture manifest audit: expected refusal (5 frames, one scene/date group, 0 missing files, 1920×1080, 0 labels; grouped split not meaningful)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
