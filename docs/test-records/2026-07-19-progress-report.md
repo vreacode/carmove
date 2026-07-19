@@ -25,6 +25,7 @@
 21. 增加 Dashboard 模型启动前的本地权重检查，缺少权重时直接拒绝创建子进程；新增 2 个无硬件模型 preflight 单测。
 22. 在线验证实际 Agent 模型生命周期：4 个配置模型权重均可见，启动第一个配置模型后已通过 `/model/stop` 停止，最终 `running=false`，未启动底盘或云台。
 23. 将 PID-only 清理修复同步到 Agent 实际使用的建图/导航脚本；现在仓库副本和当前部署副本均不再使用模糊 `pkill -f`。
+24. 运行导航入口 `check gmap_map` 只读 preflight：地图和 Nav2 参数文件存在，但因底盘未启动而在 `wheeltec_robot not ready` 处安全退出，没有启动导航进程。
 
 ## 测试结果
 
@@ -47,6 +48,7 @@ motion safety tests: 5 passed (no ROS publisher initialized)
 model preflight tests: 2 passed (missing weight rejected before spawn)
 live model start/stop smoke test: passed (configured model stopped; running=false)
 integrated mapping/navigation cleanup audit: passed (repo and deployed scripts use PID files only)
+navigation preflight: expected refusal while base stopped (`wheeltec_robot not ready`), no navigation process started
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
