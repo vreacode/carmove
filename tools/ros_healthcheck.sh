@@ -12,6 +12,7 @@ VEHICLE_SETUP_BASH="${VEHICLE_SETUP_BASH:-/home/nvidia/Desktop/wheeltec_ros2/ins
 LIDAR_SETUP_BASH="${LIDAR_SETUP_BASH:-/home/nvidia/fastlio2_ws/install/setup.bash}"
 IMU_SETUP_BASH="${IMU_SETUP_BASH:-/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash}"
 CAMERA_RTSP_URL="${CAMERA_RTSP_URL:-}"
+RATE_TIMEOUT_SECONDS="${RATE_TIMEOUT_SECONDS:-6}"
 
 PASS_COUNT=0
 WARN_COUNT=0
@@ -25,7 +26,7 @@ Usage:
 The script only reads ROS graph information and system status.
 Optional environment variables:
   ROS_SETUP_BASH, VEHICLE_SETUP_BASH, LIDAR_SETUP_BASH, IMU_SETUP_BASH
-  EXPECTED_NODE, CAMERA_RTSP_URL
+  EXPECTED_NODE, CAMERA_RTSP_URL, RATE_TIMEOUT_SECONDS
 USAGE
 }
 
@@ -130,14 +131,28 @@ for topic in /odom /c16/lslidar_point_cloud /imu/data_raw /imu/data /cmd_vel_nav
 done
 
 if command -v timeout >/dev/null 2>&1; then
-  for topic in /c16/lslidar_point_cloud /imu/data; do
-    hz_output="$(timeout 6s ros2 topic hz "$topic" --window 5 2>&1 || true)"
+  check_topic_rate() {
+    local topic="$1" info publisher_count hz_output rate
+    if ! grep -Fxq "$topic" <<<"$TOPIC_LIST"; then
+      return
+    fi
+    info="$(ros2 topic info "$topic" -v 2>/dev/null || true)"
+    publisher_count="$(awk -F': ' '/Publisher count:/ {print $2; exit}' <<<"$info")"
+    if [[ ! "$publisher_count" =~ ^[0-9]+$ || "$publisher_count" -eq 0 ]]; then
+      warn_check "topic rate skipped; no active publisher: $topic"
+      return
+    fi
+    hz_output="$(timeout "${RATE_TIMEOUT_SECONDS}s" ros2 topic hz "$topic" --window 5 2>&1 || true)"
     if grep -q 'average rate:' <<<"$hz_output"; then
       rate="$(awk -F': ' '/average rate:/ {print $2; exit}' <<<"$hz_output")"
       pass_check "topic rate: $topic = $rate"
     else
       warn_check "topic rate unavailable within timeout: $topic"
     fi
+  }
+
+  for topic in /odom /imu/data_raw /imu/data /c16/lslidar_point_cloud /scan; do
+    check_topic_rate "$topic"
   done
 fi
 
