@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between saved frames")
     parser.add_argument("--max-frames", type=int, default=0, help="0 means run until Ctrl+C")
+    parser.add_argument("--duration", type=float, default=0.0, help="maximum capture duration in seconds; 0 means no time limit")
     parser.add_argument("--jpeg-quality", type=int, default=95, help="JPEG quality 1-100")
     parser.add_argument("--scene", default="", help="scene identifier, for example gate_a_day")
     parser.add_argument("--note", default="", help="free-form capture note")
@@ -76,6 +77,9 @@ def main() -> int:
     if args.interval <= 0:
         print("--interval must be greater than zero", file=sys.stderr)
         return 2
+    if args.duration < 0:
+        print("--duration must be zero or greater", file=sys.stderr)
+        return 2
     if not 1 <= args.jpeg_quality <= 100:
         print("--jpeg-quality must be between 1 and 100", file=sys.stderr)
         return 2
@@ -103,10 +107,15 @@ def main() -> int:
     print(f"capturing from {args.source}")
     print(f"frames: {output_dir}")
     print(f"manifest: {manifest_path}")
-    print("stop with Ctrl+C" + (" or q in the preview window" if args.preview else ""))
+    limit_text = f", duration limit: {args.duration:.1f}s" if args.duration else ""
+    print("stop with Ctrl+C" + (" or q in the preview window" if args.preview else "") + limit_text)
 
     try:
+        started_at = time.monotonic()
         while args.max_frames <= 0 or saved < args.max_frames:
+            if args.duration and time.monotonic() - started_at >= args.duration:
+                print(f"duration limit reached: {args.duration:.1f}s")
+                break
             ok, frame = capture.read()
             if not ok:
                 print("stream read failed; stopping", file=sys.stderr)

@@ -36,13 +36,13 @@ class FakeCv2:
 class CapturePreviewTests(unittest.TestCase):
     def test_preview_returns_true_for_q(self):
         cv2 = FakeCv2(ord("q"))
-        args = SimpleNamespace(scene="gate_a_day", interval=1.0)
+        args = SimpleNamespace(scene="gate_a_day", interval=1.0, duration=0.0)
         self.assertTrue(show_preview(cv2, FakeFrame(), args, saved=3, next_save_at=time.monotonic()))
         self.assertEqual(cv2.imshow_calls, 1)
 
     def test_preview_continues_for_other_key(self):
         cv2 = FakeCv2(-1)
-        args = SimpleNamespace(scene="gate_a_day", interval=1.0)
+        args = SimpleNamespace(scene="gate_a_day", interval=1.0, duration=0.0)
         self.assertFalse(show_preview(cv2, FakeFrame(), args, saved=0, next_save_at=time.monotonic() + 1))
 
 

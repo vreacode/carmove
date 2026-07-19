@@ -29,6 +29,7 @@
 25. 清理 Demo/遗留 GMapping 脚本中的全局 `pkill -f`；Demo 停止流程现在只按自身 PID 文件停止，旧 GMapping 入口不再全局清理 ROS 进程。
 26. 新增 `tools/validate_ros_map.py`，在导航前检查地图 YAML 必填字段、相对 PGM 路径、PGM 头、分辨率、原点和阈值；新增 3 个地图预检单测。
 27. 将地图预检接入仓库和实际部署的导航 `check` 入口；地图内容校验通过后才会继续检查底盘、里程计和雷达就绪状态。
+28. 为 RTSP 采集工具增加 `--duration` 定时停止参数；固定时长和最大帧数可同时限制采集，适合现场无人值守的短段采集。
 
 ## 测试结果
 
@@ -57,6 +58,8 @@ ROS map preflight tests: 3 passed
 ROS map preflight: `gmap_map.yaml` passed (PGM 2016×608, resolution 0.05 m)
 navigation map-gate integration: passed (repo and deployed `check` scripts include map validator)
 navigation `check gmap_map`: map gate passed, then correctly refused at `wheeltec_robot not ready`; no navigation process started
+RTSP timed-capture syntax/tests: passed
+RTSP timed-capture smoke test: passed (1.2s limit, 3 temporary frames, not added to dataset)
 aggregate dependency-light unit tests: 29 passed
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
