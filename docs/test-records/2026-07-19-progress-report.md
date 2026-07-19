@@ -57,6 +57,7 @@ ROS map preflight tests: 3 passed
 ROS map preflight: `gmap_map.yaml` passed (PGM 2016×608, resolution 0.05 m)
 navigation map-gate integration: passed (repo and deployed `check` scripts include map validator)
 navigation `check gmap_map`: map gate passed, then correctly refused at `wheeltec_robot not ready`; no navigation process started
+aggregate dependency-light unit tests: 29 passed
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
