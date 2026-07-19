@@ -17,6 +17,7 @@
 13. 复核现有 5 张基线图片：属于单一室内导航测试场景，暂不纳入垃圾/车辆训练集，详见 `docs/test-records/2026-07-19-data-review.md`。
 14. 新增 `tools/capture_manifest_report.py`，可在标注前统计场景/日期组、帧数、时间跨度、采样间隔和缺失文件；对当前基线正确提示“单组数据不可做有意义的 train/val 划分”。
 15. 为预览叠加层增加 2 个无依赖单测，确认 `q` 退出和倒计时显示路径正常。
+16. 新增 `tools/run_yolov5_baseline.sh` 训练入口：训练前强制校验数据集和本地权重，禁止隐式下载，避免无标签数据误启动训练。
 
 ## 测试结果
 
@@ -30,6 +31,7 @@ base runtime smoke test: passed (serial, odom, imu, tf, ekf; no cmd_vel publishe
 RTSP capture smoke test: passed (video1, 1 frame, temporary output)
 capture manifest report tests: 2 passed
 capture preview tests: 2 passed
+YOLOv5 training gate smoke test: passed (missing dataset rejected before training)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
