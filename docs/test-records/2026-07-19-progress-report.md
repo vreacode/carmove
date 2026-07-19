@@ -80,6 +80,7 @@
 76. 用三个模拟场景/日期组验证 `assign_splits`：同一组保持完整不拆分，结果为 2 组 train、1 组 val；这条规则适合现场按“场景 + 日期”采集后再划分，正式数据集未改变。
 77. 补齐公开数据格式差异记录：TACO 主要是 COCO 分割标注，需先做类别合并和分割框转换；BDD100K 是道路目标 JSON，需将 `car` 等类别映射为 `vehicle`；Open Images 是类别/框标注表，需筛选目标、下载并核对许可；三者均不能直接绕过当前 manifest→YOLO 流水线。
 78. 将现场采集的可复制命令补入交付摘要：使用 `video1`、`--preview`、场景名和备注，且明确每个反斜杠必须位于行末；该命令只在用户回来后按真实场地执行，本轮未启动预览采集。
+79. 10:31 收尾核验：`nano-board-agent` 与 `nano-dashboard-server` 均为 `active`，8080/9001 健康检查均 HTTP 200；目标模型、ROS、雷达等真实残留进程数为 0。
 
 ## 测试结果
 
@@ -156,6 +157,7 @@ CVAT-to-project validator compatibility: passed (temporary YOLO fixture, train/v
 grouped split smoke: passed (3 scene/date groups stay intact; 2 train groups and 1 val group; formal dataset unchanged)
 public label-format audit: recorded (TACO COCO segmentation, BDD100K JSON, Open Images box tables require explicit conversion/mapping/license handling before current YOLO pipeline)
 field capture recipe: recorded (video1 + --preview + scene/note; shell backslashes at line ends; execution deferred until real场地 is available)
+final service/residual check: passed (10:31 CST; 2 user services active, 2 health endpoints HTTP 200, true residual count 0)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
@@ -189,7 +191,7 @@ ZT6 read-only status: connected=true
 
 本次新增的底盘启动参数修复已保留在 `ros2/vehicle/turn_on_wheeltec_robot/launch/base_serial.launch.py`；实际底盘基础链路短测结束后已停止，当前不留底盘进程。
 
-## 中午交付摘要（截至 10:21）
+## 中午交付摘要（截至 10:31）
 
 - 已完成：ROS/RTSP/YOLO 受控链路、Dashboard/Agent、停车规则、数据集闸门、服务稳定性和部署一致性核验；当前 34 项依赖轻量单测通过。
 - 未完成：本车垃圾/车辆现场采集、标注、训练和 Precision/Recall/mAP/FPS 结果；当前数据不足以启动训练。
