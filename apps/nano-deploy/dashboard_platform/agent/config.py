@@ -31,6 +31,10 @@ class AgentSettings(BaseSettings):
     camera_rtsp_visible_url: str = ""
     camera_rtsp_ir_url: str = ""
     camera_rtsp_url: str = ""
+    capture_script: Path = Path("/home/nvidia/carmove/tools/collect_rtsp_frames.py")
+    capture_workdir: Path = Path("/home/nvidia/carmove")
+    capture_output_root: Path = Path("/home/nvidia/carmove/datasets/local/roadside_v1")
+    capture_python_bin: str = ""
     siyi_zt6_enabled: bool = True
     siyi_zt6_host: str = "10.16.16.10"
     siyi_zt6_port: int = 37260

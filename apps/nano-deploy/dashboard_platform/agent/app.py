@@ -17,9 +17,10 @@ from camera.siyi_zt6 import SiyiZt6Client
 from .logs import LogBuffer
 from .motion import MotionControlManager
 from .pose import RobotPoseManager
+from .capture import CaptureManager
 from .runtime import BaseBringupManager, CommandRunner, DevScreenRecordingManager, MapManager, MediaManager, ModelProcessManager, StatusCollector
 from .sensors import SensorBridgeManager
-from .schemas import ControlRequest, GimbalPulseRequest, LoginlessAck, MediaRecordingStartRequest, MediaSnapshotRequest, ModelStartRequest, MotionArmRequest, MotionModeRequest, MotionOverrideRequest, PresetRequest, WebRTCOffer
+from .schemas import CaptureStartRequest, ControlRequest, GimbalPulseRequest, LoginlessAck, MediaRecordingStartRequest, MediaSnapshotRequest, ModelStartRequest, MotionArmRequest, MotionModeRequest, MotionOverrideRequest, PresetRequest, WebRTCOffer
 from .webrtc import WebRTCManager
 
 settings = AgentSettings()
@@ -32,6 +33,7 @@ base_manager = BaseBringupManager(settings, log_buffer, motion_manager)
 command_runner = CommandRunner(settings, log_buffer, model_manager)
 map_manager = MapManager(settings)
 media_manager = MediaManager(settings, log_buffer)
+capture_manager = CaptureManager(settings, log_buffer)
 dev_screen_recording_manager = DevScreenRecordingManager(settings, log_buffer)
 status_collector = StatusCollector(settings, model_manager, base_manager, sensor_manager, pose_manager, motion_manager)
 webrtc_manager = WebRTCManager(settings, log_buffer)
@@ -54,6 +56,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await pose_manager.start()
     await sensor_manager.start()
     yield
+    await capture_manager.stop()
     await sensor_manager.stop()
     await pose_manager.stop()
     await base_manager.stop()
@@ -356,6 +359,32 @@ async def map_image(map_name: str) -> FileResponse:
 @app.get("/media/status", dependencies=[Depends(verify_token)])
 async def media_status() -> dict:
     return media_manager.status().model_dump()
+
+
+@app.get("/capture/status", dependencies=[Depends(verify_token)])
+async def capture_status() -> dict:
+    return capture_manager.status().model_dump()
+
+
+@app.post("/capture/start", dependencies=[Depends(verify_token)])
+async def capture_start(request: CaptureStartRequest) -> dict:
+    try:
+        return (await capture_manager.start(request)).model_dump()
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/capture/stop", dependencies=[Depends(verify_token)])
+async def capture_stop() -> dict:
+    return (await capture_manager.stop()).model_dump()
+
+
+@app.get("/capture/latest", dependencies=[Depends(verify_token)])
+async def capture_latest() -> FileResponse:
+    path = capture_manager.latest_frame_path()
+    if path is None:
+        raise HTTPException(status_code=404, detail="no captured frame is available")
+    return FileResponse(path, media_type="image/jpeg", filename=path.name)
 
 
 @app.post("/media/recording/start", dependencies=[Depends(verify_token)])

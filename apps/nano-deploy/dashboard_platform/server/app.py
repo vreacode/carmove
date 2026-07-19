@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -87,6 +87,16 @@ class MediaRecordingStartRequest(BaseModel):
 
 class MediaSnapshotRequest(BaseModel):
     stream_mode: str = "visible_raw"
+
+
+class CaptureStartRequest(BaseModel):
+    stream_mode: Literal["visible_raw", "ir_raw"] = "visible_raw"
+    scene: str = Field(min_length=1, max_length=80)
+    note: str = Field(default="", max_length=240)
+    interval_seconds: float = Field(default=1.0, ge=0.2, le=60.0)
+    duration_seconds: float = Field(default=0.0, ge=0.0, le=3600.0)
+    max_frames: int = Field(default=0, ge=0, le=10000)
+    jpeg_quality: int = Field(default=95, ge=50, le=100)
 
 
 class WebRTCOffer(BaseModel):
@@ -343,6 +353,53 @@ async def api_map_image(map_name: str, authorization: str | None = Header(defaul
 @app.get("/api/media/status")
 async def api_media_status(_: str = Depends(require_token)) -> dict:
     return await bridge.fetch_json("GET", "/media/status")
+
+
+@app.get("/api/capture/status")
+async def api_capture_status(_: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("GET", "/capture/status")
+
+
+@app.post("/api/capture/start")
+async def api_capture_start(payload: CaptureStartRequest, _: str = Depends(require_token)) -> dict:
+    try:
+        return await bridge.fetch_json("POST", "/capture/start", json=payload.model_dump())
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "capture start failed"
+        try:
+            parsed = exc.response.json()
+            detail = parsed.get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
+@app.post("/api/capture/stop")
+async def api_capture_stop(_: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("POST", "/capture/stop")
+
+
+@app.get("/api/capture/latest")
+async def api_capture_latest(
+    authorization: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+) -> StreamingResponse:
+    header_token = _extract_token(authorization)
+    if header_token != settings.auth_token and token != settings.auth_token:
+        raise HTTPException(status_code=403, detail="invalid token")
+
+    async def generate():
+        async with bridge.client.stream(
+            "GET",
+            f"{bridge.base_url}/capture/latest",
+            headers={"Authorization": f"Bearer {bridge.token}"},
+            timeout=None,
+        ) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes():
+                yield chunk
+
+    return StreamingResponse(generate(), media_type="image/jpeg")
 
 
 @app.get("/api/dev-recording/status")

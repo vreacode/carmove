@@ -202,3 +202,23 @@ export type MediaItem = {
   created_at: string;
   size_bytes: number;
 };
+
+export type CaptureStatus = {
+  enabled: boolean;
+  running: boolean;
+  stream_mode?: "visible_raw" | "ir_raw" | null;
+  scene?: string | null;
+  note?: string;
+  interval_seconds?: number | null;
+  duration_seconds?: number;
+  max_frames?: number;
+  started_at?: string | null;
+  pid?: number | null;
+  frames_saved: number;
+  output_dir?: string;
+  manifest_path?: string;
+  latest_frame?: string | null;
+  last_line?: string | null;
+  last_error?: string | null;
+  command?: string[];
+};

@@ -83,6 +83,36 @@ class MediaSnapshotRequest(BaseModel):
     stream_mode: Literal["visible_raw", "ir_raw", "annotated"] = "visible_raw"
 
 
+class CaptureStartRequest(BaseModel):
+    stream_mode: Literal["visible_raw", "ir_raw"] = "visible_raw"
+    scene: str = Field(min_length=1, max_length=80)
+    note: str = Field(default="", max_length=240)
+    interval_seconds: float = Field(default=1.0, ge=0.2, le=60.0)
+    duration_seconds: float = Field(default=0.0, ge=0.0, le=3600.0)
+    max_frames: int = Field(default=0, ge=0, le=10000)
+    jpeg_quality: int = Field(default=95, ge=50, le=100)
+
+
+class CaptureStatus(BaseModel):
+    enabled: bool = True
+    running: bool = False
+    stream_mode: Literal["visible_raw", "ir_raw"] | None = None
+    scene: str | None = None
+    note: str = ""
+    interval_seconds: float | None = None
+    duration_seconds: float = 0.0
+    max_frames: int = 0
+    started_at: str | None = None
+    pid: int | None = None
+    frames_saved: int = 0
+    output_dir: str = ""
+    manifest_path: str = ""
+    latest_frame: str | None = None
+    last_line: str | None = None
+    last_error: str | None = None
+    command: list[str] = Field(default_factory=list)
+
+
 class ModelRuntimeStatus(BaseModel):
     running: bool
     model_id: str | None = None
