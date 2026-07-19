@@ -30,6 +30,9 @@
 26. 新增 `tools/validate_ros_map.py`，在导航前检查地图 YAML 必填字段、相对 PGM 路径、PGM 头、分辨率、原点和阈值；新增 3 个地图预检单测。
 27. 将地图预检接入仓库和实际部署的导航 `check` 入口；地图内容校验通过后才会继续检查底盘、里程计和雷达就绪状态。
 28. 为 RTSP 采集工具增加 `--duration` 定时停止参数；固定时长和最大帧数可同时限制采集，适合现场无人值守的短段采集。
+29. 为 YOLO RTSP 推理脚本增加 `--max-frames`、`--duration` 和完成时 FPS 日志；仓库与当前部署版本均具备这些受控 benchmark 参数（两份脚本原有停车规则代码仍保持各自现状）。
+30. 修复 CUDA FP16 预热输入类型不匹配，并为 RTSP 读取线程增加有序关闭；板端实际用 `helmet.pt`、可见光 `video1`、CUDA FP16 跑 3 帧，完成日志为 `3.26 FPS`、退出码 `0`，无事件文件和残留推理进程。
+31. 将统一单测脚本改为在板端存在部署 `.venv` 时自动选用它；本轮复跑全部通过，系统 Python 不再因缺少可选测试依赖而误报失败。
 
 ## 测试结果
 
@@ -60,7 +63,9 @@ navigation map-gate integration: passed (repo and deployed `check` scripts inclu
 navigation `check gmap_map`: map gate passed, then correctly refused at `wheeltec_robot not ready`; no navigation process started
 RTSP timed-capture syntax/tests: passed
 RTSP timed-capture smoke test: passed (1.2s limit, 3 temporary frames, not added to dataset)
-aggregate dependency-light unit tests: 29 passed
+YOLO inference bounded-run syntax: passed (bounded options present in repo and deployed scripts)
+YOLO FP16 RTSP benchmark: passed (3 frames, 3.26 FPS, exit_code=0, no event output or lingering inference process)
+aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true

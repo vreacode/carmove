@@ -101,6 +101,9 @@ class YOLOPredict(object):
 
         # 预热
         img = torch.zeros((1, 3, self.img_size, self.img_size), device=self.device)
+        # 模型使用 CUDA FP16 时，预热输入也必须是 half；否则首帧前就会因
+        # float 输入与 half bias 类型不一致而失败。
+        img = img.half() if self.half and self.device.type != 'cpu' else img.float()
         _ = model(img)
         return model, names, colors
 

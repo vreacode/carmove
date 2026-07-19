@@ -62,6 +62,8 @@ def parse_args():
     parser.add_argument("--weights", default="helmet.pt", help="model weights path")
     parser.add_argument("--source", default="rtsp://10.16.16.10:8554/video1", help="RTSP URL or video path")
     parser.add_argument("--vid-stride", type=int, default=3, help="process every Nth frame")
+    parser.add_argument("--max-frames", type=int, default=0, help="stop after this many processed frames; 0 means no frame limit")
+    parser.add_argument("--duration", type=float, default=0.0, help="stop after this many seconds; 0 means no time limit")
     parser.add_argument("--img-size", type=int, default=640, help="inference image size")
     parser.add_argument("--conf", type=float, default=0.4, help="confidence threshold")
     parser.add_argument("--iou", type=float, default=0.5, help="IoU threshold")
@@ -227,6 +229,10 @@ def write_atomic_json(path, payload):
 
 def main():
     args = parse_args()
+    if args.max_frames < 0:
+        raise SystemExit("--max-frames must be zero or greater")
+    if args.duration < 0:
+        raise SystemExit("--duration must be zero or greater")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
     event_classes = normalize_event_classes(args.event_classes)
@@ -269,8 +275,15 @@ def main():
         dataset = LoadImages(args.source, img_size=predictor.img_size, vid_stride=args.vid_stride)
 
     last_emit = {}
+    processed_frames = 0
+    started_at = time.monotonic()
     with torch.no_grad():
         for item in dataset:
+            if args.max_frames and processed_frames >= args.max_frames:
+                break
+            if args.duration and time.monotonic() - started_at >= args.duration:
+                break
+            processed_frames += 1
             if len(item) == 5:
                 path, img, im0s, vid_cap, info_str = item
             else:
@@ -373,6 +386,15 @@ def main():
                 cv2.imshow("Nano Detection (Press 'q' to exit)", show_frame)
                 if cv2.waitKey(1) == ord("q"):
                     break
+
+    close_dataset = getattr(dataset, "close", None)
+    if close_dataset is not None:
+        close_dataset()
+    if predictor.view_img:
+        cv2.destroyAllWindows()
+
+    elapsed = max(time.monotonic() - started_at, 1e-6)
+    logging.info("inference complete frames=%d elapsed=%.2fs fps=%.2f", processed_frames, elapsed, processed_frames / elapsed)
 
 
 if __name__ == "__main__":

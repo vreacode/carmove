@@ -443,6 +443,8 @@ class LoadStreams:
         n = len(sources)
         self.sources = [clean_str(x) for x in sources]  # clean source names for later
         self.imgs, self.fps, self.frames, self.threads = [None] * n, [0] * n, [0] * n, [None] * n
+        self.caps = [None] * n
+        self._closed = False
         for i, s in enumerate(sources):  # index, source
             # Start thread to read frames from video stream
             st = f"{i + 1}/{n}: {s}... "
@@ -458,6 +460,7 @@ class LoadStreams:
                 assert not is_kaggle(), "--source 0 webcam unsupported on Kaggle. Rerun command in a local environment."
             cap = cv2.VideoCapture(s)
             assert cap.isOpened(), f"{st}Failed to open {s}"
+            self.caps[i] = cap
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS)  # warning: may return 0 or nan
@@ -481,7 +484,7 @@ class LoadStreams:
     def update(self, i, cap, stream):
         """Reads frames from stream `i`, updating imgs array; handles stream reopening on signal loss."""
         n, f = 0, self.frames[i]  # frame number, frame array
-        while cap.isOpened() and n < f:
+        while not self._closed and cap.isOpened() and n < f:
             n += 1
             cap.grab()  # .read() = .grab() followed by .retrieve()
             if n % self.vid_stride == 0:
@@ -494,6 +497,18 @@ class LoadStreams:
                     cap.open(stream)  # re-open stream if signal was lost
             time.sleep(0.0)  # wait time
 
+    def close(self):
+        """Release stream captures and stop reader threads after a bounded run."""
+        if self._closed:
+            return
+        self._closed = True
+        for thread in self.threads:
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=5.0)
+        for cap in self.caps:
+            if cap is not None:
+                cap.release()
+
     def __iter__(self):
         """Resets and returns the iterator for iterating over video frames or images in a dataset."""
         self.count = -1
@@ -504,7 +519,7 @@ class LoadStreams:
         done.
         """
         self.count += 1
-        if not all(x.is_alive() for x in self.threads) or cv2.waitKey(1) == ord("q"):  # q to quit
+        if self._closed or not all(x.is_alive() for x in self.threads) or cv2.waitKey(1) == ord("q"):  # q to quit
             cv2.destroyAllWindows()
             raise StopIteration
 
