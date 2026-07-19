@@ -49,6 +49,7 @@
 45. 为 Dashboard Server 和 Agent 的违停区域增加服务端校验：越界、反向区域和错误长度均在启动模型前返回 HTTP 422；回归后模型状态保持 `running=false`，服务健康检查 HTTP 200。
 46. 为 Agent 的停车区域 schema 增加回归单测，覆盖默认关闭、合法归一化 ROI，以及越界/反向/错误长度输入；全量依赖轻量单测通过。
 47. 校正 README 的仓库/板端边界说明：明确板端部署目录会接收受控同步，密钥、权重、媒体和构建产物仍不回写 GitHub，并要求同步后做差异核对。
+48. 对本轮同步的推理脚本、数据流、事件规则、Agent 和 Server 做仓库/板端差异审计，均完全一致；板端 Dashboard `App.tsx` 保留既有云台/布局定制，仅确认停车配置已构建并上线。
 
 ## 测试结果
 
@@ -96,6 +97,7 @@ YOLO stride-5 resource baseline: recorded (10s, 57 frames/5.64 FPS, RAM ~3.93/7.
 Dashboard parking configuration UI: passed (repo/deployed Vite builds, live 8080 asset contains parking control, health=200)
 parking ROI server validation: passed (out-of-range, reversed, and wrong-length zones return HTTP 422 before spawn; model remains stopped; health=200)
 parking ROI schema tests: passed (3 tests)
+deployment parity audit: passed (inference/data/event/Agent/Server files match; board App.tsx intentional customization retained)
 aggregate dependency-light unit tests: 32 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
