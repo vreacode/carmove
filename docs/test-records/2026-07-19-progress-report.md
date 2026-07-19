@@ -34,6 +34,7 @@
 30. 修复 CUDA FP16 预热输入类型不匹配，并为 RTSP 读取线程增加包含异常路径的有序关闭；板端实际用 `helmet.pt`、可见光 `video1`、CUDA FP16 跑 3 帧，完成日志为 `3.26 FPS`、退出码 `0`，无事件文件和残留推理进程；随后 2 帧复测同样以退出码 `0` 完成。
 31. 将统一单测脚本改为在板端存在部署 `.venv` 时自动选用它；本轮复跑全部通过，系统 Python 不再因缺少可选测试依赖而误报失败。
 32. 在线通过 Agent API 启动并停止 `helmet` 模型（可见光 RTSP、FP16、事件过滤关闭），启动/停止均返回 HTTP 200，最终 `running=false`，未残留推理进程；底盘和云台仍未启动/控制。
+33. 用 `tegrastats` 对同样的 FP16 3 帧推理做资源采样：退出码 `0`、实测 `3.29 FPS`，采样窗口 RAM 峰值约 `3.9/7.6 GB`、单核 CPU 峰值约 `87%`、最高温度约 `59.7°C`；该短样本仅作基线，长时间现场运行仍需持续监测。
 
 ## 测试结果
 
@@ -67,6 +68,7 @@ RTSP timed-capture smoke test: passed (1.2s limit, 3 temporary frames, not added
 YOLO inference bounded-run syntax: passed (bounded options present in repo and deployed scripts)
 YOLO FP16 RTSP benchmark: passed (3 frames, 3.26 FPS, exit_code=0, no event output or lingering inference process)
 Dashboard → Agent model lifecycle: passed (helmet FP16 start/stop HTTP 200, final running=false, no lingering inference process)
+YOLO resource baseline: recorded (tegrastats during 3-frame FP16 run; RAM ~3.9/7.6 GB peak, per-core CPU ~87% peak, temperature ~59.7°C)
 aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
