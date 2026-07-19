@@ -13,6 +13,7 @@
 9. 只读查询 ZT6：UDP 在线，硬件 ID `8302209125`，姿态当前约为 yaw 0°、pitch 0°、roll 0°；
 10. Dashboard 健康检查通过，未发送任何车辆速度指令和新的云台转动指令。
 11. 修复底盘启动文件串口参数名错误，构建 `turn_on_wheeltec_robot` 成功；短时启动验收通过，`/odom` 约 19.9 Hz、IMU/TF/EKF 正常，`/cmd_vel_nav` 发布者为 0，详见 `docs/test-records/2026-07-19-base-runtime.md`。
+12. 使用当前 ZT6 可见光 RTSP 实际抓取 1 帧到临时目录，采集脚本、OpenCV/HEVC 解码和 CSV manifest 均正常；探测帧未写入正式数据集。
 
 ## 测试结果
 
@@ -23,6 +24,7 @@ dataset-tool tests: 4 passed
 frontend build: passed
 base preflight: pass=8 warn=0 fail=0
 base runtime smoke test: passed (serial, odom, imu, tf, ekf; no cmd_vel publisher)
+RTSP capture smoke test: passed (video1, 1 frame, temporary output)
 Dashboard health: HTTP 200
 ZT6 read-only status: connected=true
 ```
