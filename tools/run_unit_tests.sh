@@ -14,4 +14,5 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 (
   cd apps/nano-deploy
   "$PYTHON_BIN" -m unittest dashboard_platform.agent.test_motion
+  "$PYTHON_BIN" -m unittest dashboard_platform.agent.test_runtime
 )

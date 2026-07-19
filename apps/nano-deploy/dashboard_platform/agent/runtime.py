@@ -78,6 +78,12 @@ class ModelProcessManager:
                 return model
         raise ValueError(f"unknown model '{model_id}'")
 
+    def resolve_model_weight(self, weight: str) -> Path:
+        candidate = Path(weight).expanduser()
+        if not candidate.is_absolute():
+            candidate = self.settings.model_workdir / candidate
+        return candidate.resolve()
+
     async def _read_stream(self, stream: asyncio.StreamReader | None, level: str) -> None:
         if stream is None:
             return
@@ -115,6 +121,9 @@ class ModelProcessManager:
                 raise RuntimeError("model is already running")
 
             model = self.get_model(request.model_id)
+            weight_path = self.resolve_model_weight(model.weight)
+            if not weight_path.is_file():
+                raise RuntimeError(f"model weight is not available locally: {weight_path}")
             source = request.source or self.settings.model_default_source or self.settings.visible_rtsp_url
             if not source:
                 raise RuntimeError("camera source is not configured")

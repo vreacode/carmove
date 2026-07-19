@@ -18,10 +18,12 @@
 14. 新增 `tools/capture_manifest_report.py`，可在标注前统计场景/日期组、帧数、时间跨度、采样间隔和缺失文件；对当前基线正确提示“单组数据不可做有意义的 train/val 划分”。
 15. 为预览叠加层增加 2 个无依赖单测，确认 `q` 退出和倒计时显示路径正常。
 16. 新增 `tools/run_yolov5_baseline.sh` 训练入口：训练前强制校验数据集和本地权重，禁止隐式下载，避免无标签数据误启动训练。
-17. 完成仓库产物审计：当前没有本地训练权重，正式数据仍只有 5 张基线图，Git 未跟踪 `.env`、录像、图片或模型权重；Dashboard 两项用户服务保持 active。
+17. 完成仓库产物审计：Git 未跟踪 `.env`、录像、图片或模型权重；仓库内没有训练权重，但实际部署目录配置的 4 个模型权重均存在且不纳入 Git；Dashboard 两项用户服务保持 active。
 18. 修复建图/导航脚本的进程清理方式：移除模糊 `pkill -f`，改为只向本脚本 PID 文件记录的进程发送停止信号，避免误杀同机其他 ROS 实例。
 19. 扩展 `tools/ros_healthcheck.sh`：对底盘、原始/融合 IMU、雷达点云和 `/scan` 按实际发布者测频率；停机或无发布者时给出明确跳过原因，不再无谓等待。
 20. 增加 Dashboard 控制状态机的 5 个无硬件安全单测，覆盖默认 dry-run/锁定、未解锁拒绝、速度上限、导航互锁和 real 模式底盘就绪条件。
+21. 增加 Dashboard 模型启动前的本地权重检查，缺少权重时直接拒绝创建子进程；新增 2 个无硬件模型 preflight 单测。
+22. 在线验证实际 Agent 模型生命周期：4 个配置模型权重均可见，启动第一个配置模型后已通过 `/model/stop` 停止，最终 `running=false`，未启动底盘或云台。
 
 ## 测试结果
 
@@ -36,11 +38,13 @@ RTSP capture smoke test: passed (video1, 1 frame, temporary output)
 capture manifest report tests: 2 passed
 capture preview tests: 2 passed
 YOLOv5 training gate smoke test: passed (missing dataset rejected before training)
-repository artifact audit: passed (no tracked secrets/media/weights)
+repository artifact audit: passed (no tracked secrets/media/weights; deployment weights remain outside Git)
 mapping/navigation cleanup audit: passed (`bash -n`, PID-file-only cleanup)
 ROS rate-check audit: passed (publisher-aware, `RATE_TIMEOUT_SECONDS` configurable)
 ROS healthcheck offline run: completed as expected with base stopped; RTSP check passed (HEVC 1920×1080)
 motion safety tests: 5 passed (no ROS publisher initialized)
+model preflight tests: 2 passed (missing weight rejected before spawn)
+live model start/stop smoke test: passed (configured model stopped; running=false)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
