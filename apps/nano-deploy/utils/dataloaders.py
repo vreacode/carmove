@@ -444,6 +444,8 @@ class LoadStreams:
         self.sources = [clean_str(x) for x in sources]  # clean source names for later
         self.imgs, self.fps, self.frames, self.threads = [None] * n, [0] * n, [0] * n, [None] * n
         self.caps = [None] * n
+        self.frame_ids = [0] * n
+        self.last_frame_ids = [0] * n
         self._closed = False
         for i, s in enumerate(sources):  # index, source
             # Start thread to read frames from video stream
@@ -468,6 +470,7 @@ class LoadStreams:
             self.fps[i] = max((fps if math.isfinite(fps) else 0) % 100, 0) or 30  # 30 FPS fallback
 
             _, self.imgs[i] = cap.read()  # guarantee first frame
+            self.frame_ids[i] = 1
             self.threads[i] = Thread(target=self.update, args=([i, cap, s]), daemon=True)
             LOGGER.info(f"{st} Success ({self.frames[i]} frames {w}x{h} at {self.fps[i]:.2f} FPS)")
             self.threads[i].start()
@@ -491,6 +494,7 @@ class LoadStreams:
                 success, im = cap.retrieve()
                 if success:
                     self.imgs[i] = im
+                    self.frame_ids[i] += 1
                 else:
                     LOGGER.warning("WARNING ⚠️ Video stream unresponsive, please check your IP camera connection.")
                     self.imgs[i] = np.zeros_like(self.imgs[i])
@@ -512,6 +516,7 @@ class LoadStreams:
     def __iter__(self):
         """Resets and returns the iterator for iterating over video frames or images in a dataset."""
         self.count = -1
+        self.last_frame_ids = [0] * len(self.threads)
         return self
 
     def __next__(self):
@@ -519,11 +524,16 @@ class LoadStreams:
         done.
         """
         self.count += 1
-        if self._closed or not all(x.is_alive() for x in self.threads) or cv2.waitKey(1) == ord("q"):  # q to quit
-            cv2.destroyAllWindows()
-            raise StopIteration
+        while True:
+            if self._closed or not all(x.is_alive() for x in self.threads) or cv2.waitKey(1) == ord("q"):
+                cv2.destroyAllWindows()
+                raise StopIteration
+            if all(current > previous for current, previous in zip(self.frame_ids, self.last_frame_ids)):
+                break
+            time.sleep(0.001)
 
         im0 = self.imgs.copy()
+        self.last_frame_ids = self.frame_ids.copy()
         if self.transforms:
             im = np.stack([self.transforms(x) for x in im0])  # transforms
         else:

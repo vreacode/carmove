@@ -40,6 +40,7 @@
 36. 同步加强集成导航入口：雷达必须存在 `Publisher count: 1`，并在地图/底盘前置检查前安装退出清理；板端 `check gmap_map` 实测仍安全拒绝于 `wheeltec_robot not ready`，无导航 PID 文件。
 37. 为仓库旧版 2D 建图/导航入口提前安装 `EXIT/INT/TERM` 清理陷阱；`bash -n`、差异检查和全局清理关键字审计通过。
 38. 实测 YOLO `--duration 3` 自动停止：板端可见光 RTSP、CUDA FP16 处理 71 帧，完成日志 `3.04s / 23.34 FPS`，退出码 `0`，事件过滤关闭且无残留推理进程；此前 3 帧结果包含模型/流启动开销，不能直接代表稳态 FPS。
+39. 修复 `LoadStreams` 在后台线程更新画面时重复消费同一帧的问题：修复前 `vid_stride=5` 的 3 秒测试处理 80 帧，修复后为 15 帧（`3.09s / 4.85 FPS`）；同条件 `stride=1` 为 66 帧（`3.05s / 21.65 FPS`），两次退出码均为 `0`。
 
 ## 测试结果
 
@@ -79,6 +80,7 @@ current dataset pipeline preflight: expected refusal (5 unlabelled images, one g
 integrated navigation preflight hardening: passed (map gate then expected refusal at `wheeltec_robot not ready`, no navigation PID file)
 legacy 2D script cleanup hardening: passed (`bash -n`, `git diff --check`, no `pkill`/`killall`)
 YOLO duration-stop smoke test: passed (3.04s, 71 frames, 23.34 FPS, exit_code=0, no lingering inference process)
+YOLO new-frame/stride test: passed (stride=1: 66 frames/3.05s; stride=5: 15 frames/3.09s; both exit_code=0)
 aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
