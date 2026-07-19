@@ -36,6 +36,7 @@
 32. 在线通过 Agent API 启动并停止 `helmet` 模型（可见光 RTSP、FP16、事件过滤关闭），启动/停止均返回 HTTP 200，最终 `running=false`，未残留推理进程；底盘和云台仍未启动/控制。
 33. 用 `tegrastats` 对同样的 FP16 3 帧推理做资源采样：退出码 `0`、实测 `3.29 FPS`，采样窗口 RAM 峰值约 `3.9/7.6 GB`、单核 CPU 峰值约 `87%`、最高温度约 `59.7°C`；该短样本仅作基线，长时间现场运行仍需持续监测。
 34. 加强集成建图入口：雷达必须存在 `Publisher count: 1` 才算就绪，并把 PID-only 清理陷阱提前到所有等待/启动前；板端停机实测安全拒绝于 `wheeltec_robot not ready`，无残留建图 PID 文件。
+35. 对当前基线 manifest 做完整数据流水线预检：5 张图片按单组进入 train，`validate_yolo_dataset.py` 明确以非零状态拒绝 5 个缺失标签和空 val，确认训练闸门有效。
 
 ## 测试结果
 
@@ -71,6 +72,7 @@ YOLO FP16 RTSP benchmark: passed (3 frames, 3.26 FPS, exit_code=0, no event outp
 Dashboard → Agent model lifecycle: passed (helmet FP16 start/stop HTTP 200, final running=false, no lingering inference process)
 YOLO resource baseline: recorded (tegrastats during 3-frame FP16 run; RAM ~3.9/7.6 GB peak, per-core CPU ~87% peak, temperature ~59.7°C)
 integrated mapping preflight: expected refusal while base stopped (`wheeltec_robot not ready`), no mapping PID file left behind
+current dataset pipeline preflight: expected refusal (5 unlabelled images, one group, empty val; training gate not entered)
 aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
