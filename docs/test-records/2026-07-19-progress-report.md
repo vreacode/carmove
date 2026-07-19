@@ -47,6 +47,7 @@
 43. 对修复后的默认降帧路径做 10 秒资源基线：`vid_stride=5` 处理 57 帧（`5.64 FPS`）、退出码 `0`，RAM 峰值约 `3.93/7.62 GB`、单核 CPU 峰值约 `86%`、最高温度约 `60.2°C`，结束后无推理残留。
 44. 在 Dashboard 模型面板增加违停配置区：默认关闭，开启后填写归一化 ROI 和停留秒数，前端先校验范围再透传；仓库与板端前端构建均通过，实际 8080 静态资源包含“启用违停判定”，健康检查 HTTP 200。
 45. 为 Dashboard Server 和 Agent 的违停区域增加服务端校验：越界、反向区域和错误长度均在启动模型前返回 HTTP 422；回归后模型状态保持 `running=false`，服务健康检查 HTTP 200。
+46. 为 Agent 的停车区域 schema 增加回归单测，覆盖默认关闭、合法归一化 ROI，以及越界/反向/错误长度输入；全量依赖轻量单测通过。
 
 ## 测试结果
 
@@ -93,7 +94,8 @@ Dashboard Server → Agent parking forwarding: passed (API start/stop HTTP 200, 
 YOLO stride-5 resource baseline: recorded (10s, 57 frames/5.64 FPS, RAM ~3.93/7.62 GB peak, per-core CPU ~86% peak, temperature ~60.2°C, no residual process)
 Dashboard parking configuration UI: passed (repo/deployed Vite builds, live 8080 asset contains parking control, health=200)
 parking ROI server validation: passed (out-of-range, reversed, and wrong-length zones return HTTP 422 before spawn; model remains stopped; health=200)
-aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
+parking ROI schema tests: passed (3 tests)
+aggregate dependency-light unit tests: 32 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
