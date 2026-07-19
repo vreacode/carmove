@@ -79,6 +79,7 @@
 75. 用临时目录模拟 CVAT YOLO 导出做兼容性验收：`0: garbage` 和 `1: vehicle` 各 1 个框，train/val 各 1 张图，项目校验器返回 `ok=true` 且无错误；正式数据集未写入。
 76. 用三个模拟场景/日期组验证 `assign_splits`：同一组保持完整不拆分，结果为 2 组 train、1 组 val；这条规则适合现场按“场景 + 日期”采集后再划分，正式数据集未改变。
 77. 补齐公开数据格式差异记录：TACO 主要是 COCO 分割标注，需先做类别合并和分割框转换；BDD100K 是道路目标 JSON，需将 `car` 等类别映射为 `vehicle`；Open Images 是类别/框标注表，需筛选目标、下载并核对许可；三者均不能直接绕过当前 manifest→YOLO 流水线。
+78. 将现场采集的可复制命令补入交付摘要：使用 `video1`、`--preview`、场景名和备注，且明确每个反斜杠必须位于行末；该命令只在用户回来后按真实场地执行，本轮未启动预览采集。
 
 ## 测试结果
 
@@ -154,6 +155,7 @@ CVAT annotation workflow research: recorded ([task creation](https://docs.cvat.a
 CVAT-to-project validator compatibility: passed (temporary YOLO fixture, train/val each 1 image, classes garbage/vehicle, 2 objects, no errors, no formal dataset change)
 grouped split smoke: passed (3 scene/date groups stay intact; 2 train groups and 1 val group; formal dataset unchanged)
 public label-format audit: recorded (TACO COCO segmentation, BDD100K JSON, Open Images box tables require explicit conversion/mapping/license handling before current YOLO pipeline)
+field capture recipe: recorded (video1 + --preview + scene/note; shell backslashes at line ends; execution deferred until real场地 is available)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
@@ -193,3 +195,17 @@ ZT6 read-only status: connected=true
 - 未完成：本车垃圾/车辆现场采集、标注、训练和 Precision/Recall/mAP/FPS 结果；当前数据不足以启动训练。
 - 安全状态：底盘 stopped、`dry_run`、未 armed；无模型/ROS/运动残留。云台接口可用且当前 `motion_enabled=true`，无人值守前需人工复核该开关。
 - 你回来后的直接顺序：用 `video1 + --preview` 采集至少 3 个场景 → 标注 `garbage/vehicle` → 按 manifest 分组准备并校验 → 再启动 YOLOv5s 640 基线训练。
+
+现场采集命令模板（反斜杠必须是行末最后一个字符）：
+
+```bash
+cd /home/nvidia/carmove
+source /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/.venv/bin/activate
+python tools/collect_rtsp_frames.py \
+  --source rtsp://10.16.16.10:8554/video1 \
+  --output datasets/local/roadside_v1/images/raw_gate_a_day \
+  --interval 1.0 \
+  --scene gate_a_day \
+  --note "园区入口，白天，垃圾和车辆" \
+  --preview
+```
