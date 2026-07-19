@@ -67,6 +67,9 @@ function App() {
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("helmet");
   const [source, setSource] = useState("");
+  const [parkingEnabled, setParkingEnabled] = useState(false);
+  const [parkingZoneInput, setParkingZoneInput] = useState("0.25, 0.25, 0.75, 0.90");
+  const [parkingDwellInput, setParkingDwellInput] = useState("5");
   const [videoSourceMode, setVideoSourceMode] = useState<"visible_raw" | "ir_raw" | "annotated">("visible_raw");
   const [speed, setSpeed] = useState<(typeof speedLevels)[number]>("medium");
   const [commandState, setCommandState] = useState("idle");
@@ -269,6 +272,28 @@ function App() {
     try {
       setModelPending(action);
       setError("");
+      let parkingPayload: Record<string, unknown> = {};
+      if (parkingEnabled) {
+        const parkingZone = parkingZoneInput.split(",").map((value) => Number(value.trim()));
+        const dwellSeconds = Number(parkingDwellInput);
+        const validZone =
+          parkingZone.length === 4 &&
+          parkingZone.every((value) => Number.isFinite(value) && value >= 0 && value <= 1) &&
+          parkingZone[0] < parkingZone[2] &&
+          parkingZone[1] < parkingZone[3];
+        if (!validZone) {
+          setError("违停区域格式无效：请输入 0 到 1 之间的 x1,y1,x2,y2，且右下角必须大于左上角。");
+          return;
+        }
+        if (!Number.isFinite(dwellSeconds) || dwellSeconds < 0 || dwellSeconds > 3600) {
+          setError("违停停留时间必须在 0 到 3600 秒之间。");
+          return;
+        }
+        parkingPayload = {
+          parking_zone: parkingZone,
+          parking_dwell_seconds: dwellSeconds,
+        };
+      }
       await apiFetch(`/api/model/${action}`, token, {
         method: "POST",
         body: JSON.stringify({
@@ -276,6 +301,7 @@ function App() {
           source,
           view: false,
           annotate: true,
+          ...parkingPayload,
         }),
       });
     } catch (err) {
@@ -716,6 +742,47 @@ function App() {
                   <MetaCard label="进程状态" value={status?.model_status?.running ? "running" : "stopped"} />
                   <MetaCard label="PID" value={status?.model_status?.pid ? String(status.model_status.pid) : "--"} />
                   <MetaCard label="启动时间" value={status?.model_status?.started_at ? new Date(status.model_status.started_at).toLocaleTimeString() : "--"} />
+                </div>
+                <div className="mt-3 rounded-xl border border-base bg-panel/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={parkingEnabled}
+                        onChange={(event) => setParkingEnabled(event.target.checked)}
+                        className="h-4 w-4 rounded border-base accent-accent-500"
+                      />
+                      启用违停判定
+                    </label>
+                    <span className="text-xs text-muted">车辆进入 ROI 并持续停留后生成事件</span>
+                  </div>
+                  {parkingEnabled && (
+                    <div className="mt-3 grid gap-3 md:grid-cols-[1fr_150px]">
+                      <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted">
+                        禁停区域 ROI
+                        <input
+                          value={parkingZoneInput}
+                          onChange={(event) => setParkingZoneInput(event.target.value)}
+                          placeholder="x1, y1, x2, y2"
+                          aria-label="禁停区域归一化坐标"
+                          className="mt-1 w-full rounded-lg border border-base bg-card px-3 py-2 text-sm normal-case tracking-normal text-secondary outline-none ring-accent-300 transition focus:ring-2"
+                        />
+                      </label>
+                      <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted">
+                        停留秒数
+                        <input
+                          type="number"
+                          min="0"
+                          max="3600"
+                          step="0.5"
+                          value={parkingDwellInput}
+                          onChange={(event) => setParkingDwellInput(event.target.value)}
+                          aria-label="违停停留秒数"
+                          className="mt-1 w-full rounded-lg border border-base bg-card px-3 py-2 text-sm normal-case tracking-normal text-secondary outline-none ring-accent-300 transition focus:ring-2"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
             </Panel>
