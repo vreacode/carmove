@@ -58,6 +58,7 @@ logs/
 .idea/
 .vscode/
 .codex/
+**/.gradle/
 
 # Local source notes may contain credentials or private network details.
 /说明文档/
