@@ -55,6 +55,7 @@
 51. 在当前运行版本上做只读回归：34 项单测、Python 编译、核心部署副本一致性均通过；在线登录 HTTP 200，越界/反向/错误长度 ROI 均 HTTP 422，模型保持停止、相机连接正常。
 52. 对现有 `baseline_20260717.csv` 做只读数据审计：5 帧均为 1920×1080、文件完整，属于单一 `nav_test_day__2026-07-17` 分组，且 0 个相邻标签；工具正确警告当前不能进行有意义的 train/val 划分。
 53. 重复只读核对 ZT6 两路 RTSP：`video1` 仍为 HEVC 1920×1080/30fps 可见光，`video2` 仍为 HEVC 640×512/30fps 红外；现有 manifest 全部来自 `video1`，符合第一版数据集规划。
+54. 重复运行只读 ROS 健康检查：底盘、雷达、IMU、`/scan`、`/map` 均未启动，RTSP 可读；Dashboard 同步确认底盘 `running=false`、控制模式 `dry_run`、`armed=false`、`manual_override=false`，符合当前安全停机基线。
 
 ## 测试结果
 
@@ -108,6 +109,7 @@ aggregate dependency-light unit tests: 34 passed (deployment venv auto-selected)
 current-version read-only regression: passed (34 tests, Python compile, core parity; login=200, invalid ROI=422×3, model running=false, camera connected=true)
 capture manifest audit: expected refusal (5 frames, one scene/date group, 0 missing files, 1920×1080, 0 labels; grouped split not meaningful)
 RTSP profile repeat audit: passed (video1 HEVC 1920×1080/30fps; video2 HEVC 640×512/30fps; baseline manifest uses video1 only)
+ROS/control read-only safety baseline: expected stopped state (ROS healthcheck pass=3/fail=8 because base topics are intentionally stopped; RTSP readable; base stopped, dry_run, disarmed, no manual override)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
