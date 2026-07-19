@@ -89,6 +89,7 @@
 85. 静态接入审计确认项目代码已将 SDK 配置为当前直连地址 `10.16.16.10:37260`，并实现手册对应的回中/姿态/角度命令；因此手册地址差异属于默认部署示例差异，不是当前代码缺陷。
 86. 只读查询 ZT6 当前状态成功：在线，板端固件 `0.1.9`、云台固件 `0.2.3`，工作模式 `follow`、安装方向 normal、姿态约 `(0°, 0°, 0°)`；状态显示未插 TF 卡，但 RTSP 拉流正常；硬件 ID 未写入报告。
 87. 整理首轮现场采集配额建议：3 个场景、每场景 3 段、每段约 2–3 分钟，1 秒采样后去重筛选，首轮保留并标注约 300–600 张；每个目标覆盖远/中/近、不同角度/光照，同时保留少量空场景负样本。
+88. 只读盘点模型与数据资产：仓库没有 `.pt/.onnx/.engine` 目标权重，板端已有 `helmet/fall/smoke/danger` 模型均非垃圾/车辆模型；正式数据集仍为 5 张图片 + 1 个 manifest，所以尚未跨过训练闸门。
 
 ## 测试结果
 
@@ -173,6 +174,7 @@ ZT6 manual SDK audit: recorded (UDP/TCP 37260; CMD 0x08 center, 0x0D attitude, 0
 network route audit: recorded (eno1 10.16.16.2/24 -> 10.16.16.10; manual default 192.168.144.25 routes via Wi-Fi)
 project SDK wiring audit: passed (runtime/config host 10.16.16.10:37260 and documented command mapping present)
 ZT6 live read-only status: passed (connected; firmware code 0.1.9/gimbal 0.2.3; follow/normal; no TF card; no motion command)
+model/data asset boundary audit: recorded (no target weights; deployed weights are helmet/fall/smoke/danger; formal dataset 5 images + 1 manifest)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
 ZT6 read-only status: connected=true
