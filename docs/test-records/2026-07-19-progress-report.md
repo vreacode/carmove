@@ -42,6 +42,7 @@
 38. 实测 YOLO `--duration 3` 自动停止：板端可见光 RTSP、CUDA FP16 处理 71 帧，完成日志 `3.04s / 23.34 FPS`，退出码 `0`，事件过滤关闭且无残留推理进程；此前 3 帧结果包含模型/流启动开销，不能直接代表稳态 FPS。
 39. 修复 `LoadStreams` 在后台线程更新画面时重复消费同一帧的问题：修复前 `vid_stride=5` 的 3 秒测试处理 80 帧，修复后为 15 帧（`3.09s / 4.85 FPS`）；同条件 `stride=1` 为 66 帧（`3.05s / 21.65 FPS`），两次退出码均为 `0`。
 40. 将仓库已有的车辆停留/禁停区域规则同步到板端部署：新增 `vision.event_rules` 导入、`--parking-zone` 等参数和 `EVENT_JSON` 输出；板端规则单测通过，启用停车参数的 1 秒 RTSP 短测退出码 `0`、无残留。该次使用 `helmet.pt`，只证明链路，不代表车辆检测精度。
+41. 同步板端 Agent 的 `ModelStartRequest` 和运行命令转发逻辑；在线 API 传入禁停区域后，启动/停止均 HTTP 200，返回命令确认包含 `--parking-zone` 与 `--parking-dwell`，最终 `running=false`、无推理残留。
 
 ## 测试结果
 
@@ -83,6 +84,7 @@ legacy 2D script cleanup hardening: passed (`bash -n`, `git diff --check`, no `p
 YOLO duration-stop smoke test: passed (3.04s, 71 frames, 23.34 FPS, exit_code=0, no lingering inference process)
 YOLO new-frame/stride test: passed (stride=1: 66 frames/3.05s; stride=5: 15 frames/3.09s; both exit_code=0)
 deployed illegal-parking rule integration: passed (rule smoke, parking CLI help, 1s RTSP run exit_code=0; no residual process; no accuracy claim)
+Dashboard → Agent → parking arguments: passed (start/stop HTTP 200, both parking flags forwarded, final running=false)
 aggregate dependency-light unit tests: 29 passed (deployment venv auto-selected)
 Dashboard health: HTTP 200
 Dashboard camera status: HTTP 200 with local Bearer authentication
