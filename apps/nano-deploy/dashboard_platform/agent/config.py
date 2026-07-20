@@ -44,7 +44,7 @@ class AgentSettings(BaseSettings):
     battery_stale_seconds: float = 10.0
     battery_empty_voltage: float = 0.0
     battery_full_voltage: float = 0.0
-    battery_low_voltage: float = 0.0
+    battery_low_voltage: float = 20.0
     battery_low_percentage: float = 20.0
     siyi_zt6_enabled: bool = True
     siyi_zt6_host: str = "10.16.16.10"
