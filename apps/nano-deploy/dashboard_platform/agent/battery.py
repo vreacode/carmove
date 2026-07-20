@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shlex
 import signal
 import time
@@ -27,6 +28,9 @@ class BatteryManager:
         self._stdout_task: asyncio.Task[None] | None = None
         self._stderr_task: asyncio.Task[None] | None = None
         self._wait_task: asyncio.Task[None] | None = None
+        self.serial_process: asyncio.subprocess.Process | None = None
+        self._serial_stderr_task: asyncio.Task[None] | None = None
+        self._serial_wait_task: asyncio.Task[None] | None = None
         self.state = BatteryStatus(source=self.settings.battery_voltage_topic)
         window = max(3, int(self.settings.battery_filter_window))
         self._voltage_samples: deque[float] = deque(maxlen=window)
@@ -104,6 +108,109 @@ class BatteryManager:
         )
         return ["/bin/bash", "-lc", shell]
 
+    def _serial_command(self) -> list[str]:
+        bridge_path = Path(__file__).with_name("serial_voltage_bridge.py")
+        shell = " && ".join(
+            [
+                f"source {shlex.quote(self.settings.battery_ros_setup_bash)}",
+                "export PYTHONUNBUFFERED=1",
+                " ".join(
+                    [
+                        shlex.quote(self.settings.battery_python_bin),
+                        shlex.quote(str(bridge_path)),
+                        "--port", shlex.quote(self.settings.battery_serial_port),
+                        "--baudrate", shlex.quote(str(self.settings.battery_serial_baudrate)),
+                        "--topic", shlex.quote(self.settings.battery_voltage_topic),
+                    ]
+                ),
+            ]
+        )
+        return ["/bin/bash", "-lc", shell]
+
+    async def _has_voltage_publisher(self) -> bool:
+        shell = " && ".join(
+            [
+                f"source {shlex.quote(self.settings.battery_ros_setup_bash)}",
+                f"ROS2CLI_NO_DAEMON=1 timeout 4 ros2 topic info {shlex.quote(self.settings.battery_voltage_topic)}",
+            ]
+        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "/bin/bash", "-lc", shell,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+        except (asyncio.TimeoutError, OSError):
+            return False
+        text = (stdout + stderr).decode("utf-8", errors="ignore")
+        match = re.search(r"Publisher count:\s*(\d+)", text)
+        return bool(match and int(match.group(1)) > 0)
+
+    async def _consume_serial_stderr(self) -> None:
+        if not self.serial_process or not self.serial_process.stderr:
+            return
+        async for raw in self.serial_process.stderr:
+            line = raw.decode("utf-8", errors="ignore").strip()
+            if line:
+                self.log_buffer.add("system", "info", f"voltage serial reader: {line}")
+
+    async def _wait_serial_reader(self) -> None:
+        process = self.serial_process
+        if not process:
+            return
+        code = await process.wait()
+        if code != 0:
+            self.log_buffer.add("system", "warning", f"voltage serial reader exited with code {code}")
+        if self.serial_process is process:
+            self.serial_process = None
+
+    async def start_serial_reader(self) -> None:
+        if not self.settings.battery_enabled or not self.settings.battery_direct_serial_enabled:
+            return
+        if self.serial_process and self.serial_process.returncode is None:
+            return
+        if await self._has_voltage_publisher():
+            self.log_buffer.add("system", "info", "voltage serial reader skipped; chassis driver already owns PowerVoltage")
+            return
+        try:
+            self.serial_process = await asyncio.create_subprocess_exec(
+                *self._serial_command(),
+                cwd=str(self.settings.model_workdir),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                start_new_session=True,
+            )
+        except OSError as exc:
+            self.log_buffer.add("system", "warning", f"voltage serial reader failed to start: {exc}")
+            self.serial_process = None
+            return
+        self._serial_stderr_task = asyncio.create_task(self._consume_serial_stderr())
+        self._serial_wait_task = asyncio.create_task(self._wait_serial_reader())
+        self.log_buffer.add("system", "info", f"voltage serial reader started pid={self.serial_process.pid}")
+
+    async def stop_serial_reader(self) -> None:
+        process = self.serial_process
+        if not process or process.returncode is not None:
+            self.serial_process = None
+            return
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGINT)
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGTERM)
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3)
+            except asyncio.TimeoutError:
+                with suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
+                await process.wait()
+        self.serial_process = None
+
     async def start(self) -> None:
         if not self.settings.battery_enabled:
             self.log_buffer.add("system", "info", "battery monitor disabled by config")
@@ -123,6 +230,7 @@ class BatteryManager:
         self._stderr_task = asyncio.create_task(self._consume_stderr())
         self._wait_task = asyncio.create_task(self._wait())
         self.log_buffer.add("system", "info", f"battery monitor started pid={self.process.pid}")
+        await self.start_serial_reader()
 
     async def _consume_stdout(self) -> None:
         if not self.process or not self.process.stdout:
@@ -163,6 +271,7 @@ class BatteryManager:
         self.process = None
 
     async def stop(self) -> None:
+        await self.stop_serial_reader()
         process = self.process
         if not process or process.returncode is not None:
             return

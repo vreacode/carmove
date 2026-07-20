@@ -48,6 +48,9 @@ class AgentSettings(BaseSettings):
     battery_low_percentage: float = 20.0
     battery_filter_window: int = 5
     battery_low_confirm_samples: int = 3
+    battery_direct_serial_enabled: bool = True
+    battery_serial_port: str = "/dev/ttyCH343USB0"
+    battery_serial_baudrate: int = 115200
     siyi_zt6_enabled: bool = True
     siyi_zt6_host: str = "10.16.16.10"
     siyi_zt6_port: int = 37260

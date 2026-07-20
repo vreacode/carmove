@@ -1062,10 +1062,17 @@ class DevScreenRecordingManager:
 
 
 class BaseBringupManager:
-    def __init__(self, settings: AgentSettings, log_buffer: LogBuffer, motion_manager: MotionControlManager) -> None:
+    def __init__(
+        self,
+        settings: AgentSettings,
+        log_buffer: LogBuffer,
+        motion_manager: MotionControlManager,
+        battery_manager: BatteryManager | None = None,
+    ) -> None:
         self.settings = settings
         self.log_buffer = log_buffer
         self.motion_manager = motion_manager
+        self.battery_manager = battery_manager
         self.process: asyncio.subprocess.Process | None = None
         self.state = BaseStatus()
         self._stdout_task: asyncio.Task[None] | None = None
@@ -1086,7 +1093,7 @@ class BaseBringupManager:
             with suppress(asyncio.CancelledError, Exception):
                 await self._monitor_task
             self._monitor_task = None
-        await self.stop_bringup()
+        await self.stop_bringup(restore_battery=False)
 
     async def _read_stream(self, stream: asyncio.StreamReader | None, level: str) -> None:
         if stream is None:
@@ -1111,6 +1118,11 @@ class BaseBringupManager:
         async with self._lock:
             if self.process and self.process.returncode is None:
                 return await self.refresh()
+            existing = await self.refresh(force=True)
+            if existing.wheeltec_robot_online:
+                return existing
+            if self.battery_manager:
+                await self.battery_manager.stop_serial_reader()
             env = os.environ.copy()
             env.setdefault("PYTHONNOUSERSITE", "1")
             command = (
@@ -1118,15 +1130,20 @@ class BaseBringupManager:
                 "source /home/nvidia/Desktop/wheeltec_ros2/install/local_setup.bash && "
                 f"bash {self.settings.base_start_script}"
             )
-            self.process = await asyncio.create_subprocess_exec(
-                "/bin/bash",
-                "-lc",
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-                start_new_session=True,
-            )
+            try:
+                self.process = await asyncio.create_subprocess_exec(
+                    "/bin/bash",
+                    "-lc",
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                    start_new_session=True,
+                )
+            except OSError:
+                if self.battery_manager:
+                    await self.battery_manager.start_serial_reader()
+                raise
             self.state.started_by_agent = True
             self.state.running = True
             self.state.pid = self.process.pid
@@ -1142,9 +1159,12 @@ class BaseBringupManager:
                 return state
             await asyncio.sleep(0.5)
         self.state.last_error = "base bringup started but chassis topics are not ready yet"
+        if not self.process or self.process.returncode is not None:
+            if self.battery_manager:
+                await self.battery_manager.start_serial_reader()
         return self.state
 
-    async def stop_bringup(self) -> BaseStatus:
+    async def stop_bringup(self, restore_battery: bool = True) -> BaseStatus:
         async with self._lock:
             proc = self.process
             if proc and proc.returncode is None:
@@ -1165,7 +1185,10 @@ class BaseBringupManager:
             self.state.running = False
             self.state.started_by_agent = False
             self.state.pid = None
-        return await self.refresh()
+        state = await self.refresh(force=True)
+        if restore_battery and self.battery_manager:
+            await self.battery_manager.start_serial_reader()
+        return state
 
     async def _run_ros_cli(self, script: str) -> str:
         proc = await asyncio.create_subprocess_exec(
