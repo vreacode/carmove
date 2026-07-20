@@ -19,6 +19,7 @@ import psutil
 from PIL import Image, ImageStat
 
 from .config import AgentSettings, ModelEntry
+from .battery import BatteryManager
 from .logs import LogBuffer
 from .motion import MotionControlManager
 from .pose import RobotPoseManager
@@ -1244,6 +1245,7 @@ class StatusCollector:
         sensor_manager: SensorBridgeManager,
         pose_manager: RobotPoseManager,
         motion_manager: MotionControlManager,
+        battery_manager: BatteryManager,
     ) -> None:
         self.settings = settings
         self.model_manager = model_manager
@@ -1251,6 +1253,7 @@ class StatusCollector:
         self.sensor_manager = sensor_manager
         self.pose_manager = pose_manager
         self.motion_manager = motion_manager
+        self.battery_manager = battery_manager
         self._last_payload: AgentStatus | None = None
         self._last_ts = 0.0
 
@@ -1340,6 +1343,7 @@ class StatusCollector:
             rviz_available=rviz_available,
             rviz_running=rviz_running,
             base_status=self.base_manager.state,
+            battery_status=self.battery_manager.status(),
             model_status=self.model_manager.runtime,
             motion_state=self.motion_manager.snapshot(navigation_running=navigation_running),
             cpu_percent=psutil.cpu_percent(interval=None),

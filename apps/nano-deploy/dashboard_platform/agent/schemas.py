@@ -125,6 +125,19 @@ class CaptureGalleryItem(BaseModel):
     latest_frame_name: str | None = None
 
 
+class BatteryStatus(BaseModel):
+    available: bool = False
+    voltage: float | None = None
+    percentage: float | None = None
+    charging: bool | None = None
+    charging_current: float | None = None
+    source: str = "/PowerVoltage"
+    updated_at: str | None = None
+    low: bool = False
+    error: str | None = None
+    updated_at_epoch: float = Field(default=0.0, exclude=True)
+
+
 class ModelRuntimeStatus(BaseModel):
     running: bool
     model_id: str | None = None
@@ -185,6 +198,7 @@ class AgentStatus(BaseModel):
     rviz_available: bool = False
     rviz_running: bool = False
     base_status: BaseStatus | None = None
+    battery_status: BatteryStatus | None = None
     model_status: ModelRuntimeStatus
     motion_state: MotionState | None = None
     cpu_percent: float | None = None

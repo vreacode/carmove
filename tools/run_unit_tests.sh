@@ -23,6 +23,7 @@ fi
   "$UNIT_TEST_PYTHON" -m unittest dashboard_platform.agent.test_runtime
   "$UNIT_TEST_PYTHON" -m unittest dashboard_platform.agent.test_schemas
   "$UNIT_TEST_PYTHON" -m unittest dashboard_platform.agent.test_capture
+  "$UNIT_TEST_PYTHON" -m unittest dashboard_platform.agent.test_battery
   "$UNIT_TEST_PYTHON" -m unittest dashboard_platform.server.test_app
 )
 "$UNIT_TEST_PYTHON" -m unittest tools.test_validate_ros_map

@@ -60,6 +60,14 @@ function galleryFrameUrl(token: string, group: string) {
   return `${API_BASE}/api/capture/gallery/${encodeURIComponent(group)}/latest?token=${encodeURIComponent(token)}`;
 }
 
+function batteryLabel(status: SystemStatus | null) {
+  const battery = status?.battery_status;
+  if (!battery?.available) return "未知";
+  if (battery.percentage != null) return `${battery.percentage.toFixed(0)}%`;
+  if (battery.voltage != null) return `${battery.voltage.toFixed(1)}V`;
+  return "已连接";
+}
+
 function Metric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "warn" }) {
   return (
     <div className={`mobile-metric mobile-metric-${tone}`}>
@@ -372,11 +380,12 @@ export default function MobileCaptureConsole() {
             <Metric label="CPU" value={status?.cpu_percent != null ? `${status.cpu_percent.toFixed(0)}%` : "--"} />
             <Metric label="内存" value={status?.memory_percent != null ? `${status.memory_percent.toFixed(0)}%` : "--"} />
             <Metric label="GPU" value={status?.gpu_percent != null ? `${status.gpu_percent.toFixed(0)}%` : "--"} />
+            <Metric label="电量" value={batteryLabel(status)} tone={status?.battery_status?.low ? "warn" : status?.battery_status?.available ? "good" : "neutral"} />
             <Metric label="相机" value={cameraOnline ? "在线" : "离线"} tone={cameraOnline ? "good" : "warn"} />
             <Metric label="雷达" value={status?.lidar_online ? "在线" : "停止"} tone={status?.lidar_online ? "good" : "neutral"} />
             <Metric label="IMU" value={status?.imu_online ? "在线" : "停止"} tone={status?.imu_online ? "good" : "neutral"} />
           </div>
-          <section className="mobile-detail-card"><div className="mobile-detail-row"><span>视频源</span><strong>{status?.current_video_source || "--"}</strong></div><div className="mobile-detail-row"><span>分辨率目标</span><strong>video1 / 可见光</strong></div><div className="mobile-detail-row"><span>云台状态</span><strong>{cameraStatus?.status?.motion_mode_name || "--"} · {cameraStatus?.attitude?.yaw_deg?.toFixed(1) ?? "--"}° yaw</strong></div><div className="mobile-detail-row"><span>控制模式</span><strong>{status?.motion_state?.mode || "dry_run"}</strong></div></section>
+          <section className="mobile-detail-card"><div className="mobile-detail-row"><span>视频源</span><strong>{status?.current_video_source || "--"}</strong></div><div className="mobile-detail-row"><span>分辨率目标</span><strong>video1 / 可见光</strong></div><div className="mobile-detail-row"><span>云台状态</span><strong>{cameraStatus?.status?.motion_mode_name || "--"} · {cameraStatus?.attitude?.yaw_deg?.toFixed(1) ?? "--"}° yaw</strong></div><div className="mobile-detail-row"><span>电池</span><strong>{batteryLabel(status)}{status?.battery_status?.charging ? " · 充电中" : ""}</strong></div><div className="mobile-detail-row"><span>控制模式</span><strong>{status?.motion_state?.mode || "dry_run"}</strong></div></section>
           <section className="mobile-safety-note"><CheckCircleIcon /><div><strong>安全闸门保持开启</strong><p>手机端第一版只控制采集、拍照和监控，不直接启动车辆或发送运动命令。</p></div></section>
         </div>
       ) : null}

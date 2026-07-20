@@ -13,6 +13,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from .config import AgentSettings
+from .battery import BatteryManager
 from camera.siyi_zt6 import SiyiZt6Client
 from .logs import LogBuffer
 from .motion import MotionControlManager
@@ -29,13 +30,14 @@ model_manager = ModelProcessManager(settings, log_buffer)
 sensor_manager = SensorBridgeManager(settings, log_buffer)
 pose_manager = RobotPoseManager(settings, log_buffer)
 motion_manager = MotionControlManager(settings, log_buffer)
+battery_manager = BatteryManager(settings, log_buffer)
 base_manager = BaseBringupManager(settings, log_buffer, motion_manager)
 command_runner = CommandRunner(settings, log_buffer, model_manager)
 map_manager = MapManager(settings)
 media_manager = MediaManager(settings, log_buffer)
 capture_manager = CaptureManager(settings, log_buffer)
 dev_screen_recording_manager = DevScreenRecordingManager(settings, log_buffer)
-status_collector = StatusCollector(settings, model_manager, base_manager, sensor_manager, pose_manager, motion_manager)
+status_collector = StatusCollector(settings, model_manager, base_manager, sensor_manager, pose_manager, motion_manager, battery_manager)
 webrtc_manager = WebRTCManager(settings, log_buffer)
 siyi_gimbal_lock = asyncio.Lock()
 
@@ -55,7 +57,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await base_manager.start()
     await pose_manager.start()
     await sensor_manager.start()
+    await battery_manager.start()
     yield
+    await battery_manager.stop()
     await capture_manager.stop()
     await sensor_manager.stop()
     await pose_manager.stop()

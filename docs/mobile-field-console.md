@@ -8,6 +8,7 @@
 - 可见光/红外源切换，并按场景、备注、采样间隔和时长启动/停止 RTSP 原始帧采集
 - 单帧快照
 - CPU、内存、GPU、相机、雷达、IMU、云台和运动安全状态监控
+- 底盘 `PowerVoltage` 电压、充电标记和可选电量百分比监控
 - 最近一帧和 manifest 路径查看
 - 历史采集段列表，按最新采集时间排序，并显示每段的代表帧、帧数、来源和备注
 
@@ -48,6 +49,8 @@ http://<Dashboard设备的Tailscale地址>:8080
 ```
 
 登录后可通过浏览器的“添加到主屏幕”安装成 PWA。第一版没有把运动控制放进手机页面；现有的 `ENABLE_MOTION_CONTROL=false`、`MOTION_CONTROL_MODE=dry_run` 和 ZT6 云台运动锁继续有效。
+
+底盘源码发布的 `PowerVoltage` 是电压而不是百分比。Agent 会只读订阅 `/PowerVoltage`、`/robot_charging_flag` 和 `/robot_charging_current`。如果 `.env` 中没有配置 `BATTERY_EMPTY_VOLTAGE` 和 `BATTERY_FULL_VOLTAGE`，手机会显示实时电压，不会伪造百分比；配置实际电池规格后才显示百分比和低电量告警。当前 ROS/底盘停机时显示“未知”是正确状态，不代表电池没电。
 
 ## 本地验证
 

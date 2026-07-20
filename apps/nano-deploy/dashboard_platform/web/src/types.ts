@@ -55,6 +55,18 @@ export type BaseStatus = {
   last_error?: string | null;
 };
 
+export type BatteryStatus = {
+  available: boolean;
+  voltage?: number | null;
+  percentage?: number | null;
+  charging?: boolean | null;
+  charging_current?: number | null;
+  source?: string;
+  updated_at?: string | null;
+  low?: boolean;
+  error?: string | null;
+};
+
 export type SiyiCameraStatus = {
   enabled: boolean;
   motion_enabled?: boolean;
@@ -89,6 +101,7 @@ export type SystemStatus = {
   rviz_available?: boolean;
   rviz_running?: boolean;
   base_status?: BaseStatus | null;
+  battery_status?: BatteryStatus | null;
   cpu_percent?: number | null;
   memory_percent?: number | null;
   gpu_percent?: number | null;

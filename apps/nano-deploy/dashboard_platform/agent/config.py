@@ -35,6 +35,17 @@ class AgentSettings(BaseSettings):
     capture_workdir: Path = Path("/home/nvidia/carmove")
     capture_output_root: Path = Path("/home/nvidia/carmove/datasets/local/roadside_v1")
     capture_python_bin: str = ""
+    battery_enabled: bool = True
+    battery_voltage_topic: str = "/PowerVoltage"
+    battery_charging_topic: str = "/robot_charging_flag"
+    battery_current_topic: str = "/robot_charging_current"
+    battery_ros_setup_bash: str = "/opt/ros/humble/setup.bash"
+    battery_python_bin: str = "python3"
+    battery_stale_seconds: float = 10.0
+    battery_empty_voltage: float = 0.0
+    battery_full_voltage: float = 0.0
+    battery_low_voltage: float = 0.0
+    battery_low_percentage: float = 20.0
     siyi_zt6_enabled: bool = True
     siyi_zt6_host: str = "10.16.16.10"
     siyi_zt6_port: int = 37260
