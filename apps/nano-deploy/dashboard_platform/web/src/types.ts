@@ -222,3 +222,15 @@ export type CaptureStatus = {
   last_error?: string | null;
   command?: string[];
 };
+
+export type CaptureGalleryItem = {
+  group: string;
+  scene: string;
+  stream_mode: "visible_raw" | "ir_raw" | "unknown";
+  frames_saved: number;
+  first_captured_at?: string | null;
+  last_captured_at?: string | null;
+  note?: string;
+  manifest_name: string;
+  latest_frame_name?: string | null;
+};

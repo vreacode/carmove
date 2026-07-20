@@ -113,6 +113,18 @@ class CaptureStatus(BaseModel):
     command: list[str] = Field(default_factory=list)
 
 
+class CaptureGalleryItem(BaseModel):
+    group: str
+    scene: str
+    stream_mode: Literal["visible_raw", "ir_raw", "unknown"] = "unknown"
+    frames_saved: int = 0
+    first_captured_at: str | None = None
+    last_captured_at: str | None = None
+    note: str = ""
+    manifest_name: str
+    latest_frame_name: str | None = None
+
+
 class ModelRuntimeStatus(BaseModel):
     running: bool
     model_id: str | None = None

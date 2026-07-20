@@ -360,6 +360,40 @@ async def api_capture_status(_: str = Depends(require_token)) -> dict:
     return await bridge.fetch_json("GET", "/capture/status")
 
 
+@app.get("/api/capture/gallery")
+async def api_capture_gallery(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _: str = Depends(require_token),
+) -> dict:
+    items = await bridge.fetch_json("GET", f"/capture/gallery?page={page}&page_size={page_size}")
+    return {"items": items}
+
+
+@app.get("/api/capture/gallery/{group}/latest")
+async def api_capture_gallery_latest(
+    group: str,
+    authorization: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+) -> StreamingResponse:
+    header_token = _extract_token(authorization)
+    if header_token != settings.auth_token and token != settings.auth_token:
+        raise HTTPException(status_code=403, detail="invalid token")
+
+    async def generate():
+        async with bridge.client.stream(
+            "GET",
+            f"{bridge.base_url}/capture/gallery/{group}/latest",
+            headers={"Authorization": f"Bearer {bridge.token}"},
+            timeout=None,
+        ) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes():
+                yield chunk
+
+    return StreamingResponse(generate(), media_type="image/jpeg")
+
+
 @app.post("/api/capture/start")
 async def api_capture_start(payload: CaptureStartRequest, _: str = Depends(require_token)) -> dict:
     try:

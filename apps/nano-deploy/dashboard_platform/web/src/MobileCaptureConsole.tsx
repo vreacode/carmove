@@ -15,7 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { VideoStream } from "./components/VideoStream";
 import { API_BASE, apiFetch, clearToken, loadToken, saveToken, wsUrl } from "./lib";
-import type { CaptureStatus, ConnectionState, SiyiCameraStatus, SystemStatus } from "./types";
+import type { CaptureGalleryItem, CaptureStatus, ConnectionState, SiyiCameraStatus, SystemStatus } from "./types";
 
 type LoginResponse = { token: string; username: string };
 type Tab = "capture" | "monitor" | "archive";
@@ -41,6 +41,23 @@ function formatAge(timestamp?: string | null) {
 
 function captureModeLabel(mode: CaptureMode) {
   return mode === "ir_raw" ? "红外" : "可见光";
+}
+
+function galleryModeLabel(mode: CaptureGalleryItem["stream_mode"]) {
+  if (mode === "ir_raw") return "红外";
+  if (mode === "visible_raw") return "可见光";
+  return "来源未标记";
+}
+
+function formatCaptureTime(timestamp?: string | null) {
+  if (!timestamp) return "时间未知";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return date.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function galleryFrameUrl(token: string, group: string) {
+  return `${API_BASE}/api/capture/gallery/${encodeURIComponent(group)}/latest?token=${encodeURIComponent(token)}`;
 }
 
 function Metric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "warn" }) {
@@ -98,6 +115,7 @@ export default function MobileCaptureConsole() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
+  const [gallery, setGallery] = useState<CaptureGalleryItem[]>([]);
   const [videoState, setVideoState] = useState<ConnectionState>("idle");
   const [useFallback, setUseFallback] = useState(false);
   const [streamMode, setStreamMode] = useState<CaptureMode>("visible_raw");
@@ -135,6 +153,26 @@ export default function MobileCaptureConsole() {
       socket.close();
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!token || tab !== "archive") return;
+    let cancelled = false;
+    const refresh = () => {
+      void apiFetch<{ items: CaptureGalleryItem[] }>("/api/capture/gallery?page=1&page_size=20", token)
+        .then((payload) => {
+          if (!cancelled) setGallery(payload.items);
+        })
+        .catch((err) => {
+          if (!cancelled) setError(explainMobileError(err));
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [tab, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -190,6 +228,15 @@ export default function MobileCaptureConsole() {
       setError(explainMobileError(err));
     } finally {
       setPending("");
+    }
+  }
+
+  async function refreshGallery() {
+    try {
+      const payload = await apiFetch<{ items: CaptureGalleryItem[] }>("/api/capture/gallery?page=1&page_size=20", token);
+      setGallery(payload.items);
+    } catch (err) {
+      setError(explainMobileError(err));
     }
   }
 
@@ -262,7 +309,7 @@ export default function MobileCaptureConsole() {
           <p className="mobile-kicker">CARMOVE / FIELD CONSOLE</p>
           <h1>{tab === "capture" ? "现场采集" : tab === "monitor" ? "链路监控" : "采集记录"}</h1>
         </div>
-        <button className="mobile-icon-button" aria-label="刷新状态" onClick={() => void refreshCapture()} disabled={pending === "refresh"}>
+        <button className="mobile-icon-button" aria-label="刷新状态" onClick={() => { void refreshCapture(); if (tab === "archive") void refreshGallery(); }} disabled={pending === "refresh"}>
           <ArrowPathIcon className={pending === "refresh" ? "mobile-spin" : ""} />
         </button>
       </header>
@@ -339,6 +386,10 @@ export default function MobileCaptureConsole() {
           <section className="mobile-archive-hero"><span className="mobile-eyebrow">LATEST CAPTURE</span><h2>{capture?.scene || "还没有采集任务"}</h2><p>{capture?.manifest_path || "开始一段采集后，这里会显示 manifest 和最近一帧。"}</p></section>
           {latestFrameUrl ? <img className="mobile-latest-frame" src={latestFrameUrl} alt="最近保存的采集帧" /> : <div className="mobile-empty-state"><ArchiveBoxIcon /><strong>等待第一段现场数据</strong><span>采集完成的原始帧会保存在小车上，并按场景和日期分组。</span></div>}
           <div className="mobile-archive-stats"><Metric label="已保存" value={`${capture?.frames_saved ?? 0} 帧`} /><Metric label="采样间隔" value={`${capture?.interval_seconds ?? "--"} 秒`} /><Metric label="状态" value={capture?.running ? "进行中" : "已停止"} tone={capture?.running ? "good" : "neutral"} /></div>
+          <section className="mobile-history-card">
+            <div className="mobile-section-heading"><div><span className="mobile-eyebrow">CAPTURE HISTORY</span><h2>历史采集段</h2></div><strong>{gallery.length}</strong></div>
+            {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <article className="mobile-history-item" key={item.group}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)}</span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p></div></article>)}</div> : <div className="mobile-history-empty">还没有找到已完成的 manifest。</div>}
+          </section>
           {capture?.last_error ? <div className="mobile-inline-error"><ExclamationTriangleIcon />{capture.last_error}</div> : null}
         </div>
       ) : null}

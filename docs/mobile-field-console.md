@@ -9,6 +9,7 @@
 - 单帧快照
 - CPU、内存、GPU、相机、雷达、IMU、云台和运动安全状态监控
 - 最近一帧和 manifest 路径查看
+- 历史采集段列表，按最新采集时间排序，并显示每段的代表帧、帧数、来源和备注
 
 采集数据由板端 Agent 启动 `tools/collect_rtsp_frames.py`，默认落在：
 
@@ -17,6 +18,8 @@
 ├── images/<scene>_<YYYY-MM-DD>/*.jpg
 └── manifests/<scene>_<YYYY-MM-DD>.csv
 ```
+
+手机“记录”页读取 `manifests/` 下的 CSV，而不是只依赖 Agent 进程内存中的当前状态。因此 Agent/Dashboard 重启后，已经完成的采集段仍然可见。每个历史条目的代表帧通过受保护的 `/api/capture/gallery/{group}/latest` 读取；接口只接受合法的采集组名，并且只返回 `CAPTURE_OUTPUT_ROOT` 内的文件。
 
 ## Tailscale 拓扑
 
@@ -53,7 +56,7 @@ cd /home/nvidia/carmove/apps/nano-deploy/dashboard_platform/web
 npm run build
 ```
 
-后端构建完成后，按项目原有的 systemd 服务重启 Dashboard 和 Agent，手机页面会随 Dashboard 的 `web/dist` 自动提供。
+后端构建完成后，按项目原有的 systemd 服务重启 Dashboard 和 Agent，手机页面会随 Dashboard 的 `web/dist` 自动提供。部署时需要确认 Agent 的 `.env` 中 `CAPTURE_SCRIPT`、`CAPTURE_WORKDIR` 和 `CAPTURE_OUTPUT_ROOT` 指向同一台设备上可读写的位置；不要把 RTSP 用户名、密码或 token 写进采集记录页面。
 
 ## 设计依据
 

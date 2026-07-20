@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import os
 import re
 import signal
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from .config import AgentSettings
 from .logs import LogBuffer
-from .schemas import CaptureStartRequest, CaptureStatus
+from .schemas import CaptureGalleryItem, CaptureStartRequest, CaptureStatus
 
 
 class CaptureManager:
@@ -50,6 +51,94 @@ class CaptureManager:
         if self._latest_frame and self._latest_frame.is_file():
             return self._latest_frame
         return None
+
+    @staticmethod
+    def _stream_mode(source: str) -> str:
+        value = source.lower()
+        if "video2" in value or "infrared" in value or "ir_raw" in value:
+            return "ir_raw"
+        if "video1" in value or "visible" in value:
+            return "visible_raw"
+        return "unknown"
+
+    def list_gallery(self, page: int = 1, page_size: int = 20) -> list[CaptureGalleryItem]:
+        """Read completed capture sessions without exposing absolute filesystem paths."""
+        if page < 1 or page_size < 1:
+            raise ValueError("page and page_size must be positive")
+        manifest_root = (self.settings.capture_output_root.expanduser().resolve() / "manifests").resolve()
+        root = self.settings.capture_output_root.expanduser().resolve()
+        if root not in manifest_root.parents:
+            raise RuntimeError("capture manifest path must stay inside capture_output_root")
+
+        items: list[CaptureGalleryItem] = []
+        for manifest_path in sorted(manifest_root.glob("*.csv"), key=lambda path: path.stat().st_mtime, reverse=True):
+            rows: list[dict[str, str]] = []
+            try:
+                with manifest_path.open("r", newline="", encoding="utf-8") as handle:
+                    rows = [row for row in csv.DictReader(handle) if row.get("frame_path")]
+            except (OSError, UnicodeError, csv.Error) as exc:
+                self.log_buffer.add("capture", "warning", f"skip invalid manifest {manifest_path.name}: {exc}")
+                continue
+            if not rows:
+                continue
+
+            timestamps = sorted(row.get("captured_at", "").strip() for row in rows if row.get("captured_at", "").strip())
+            latest_frame_name: str | None = None
+            latest_timestamp = ""
+            stream_modes: set[str] = set()
+            for row in rows:
+                source = row.get("source", "")
+                stream_modes.add(self._stream_mode(source))
+                frame_path = Path(row["frame_path"]).expanduser().resolve()
+                if root not in frame_path.parents or not frame_path.is_file():
+                    continue
+                captured_at = row.get("captured_at", "")
+                if not latest_frame_name or captured_at >= latest_timestamp:
+                    latest_frame_name = frame_path.name
+                    latest_timestamp = captured_at
+
+            scene = next((row.get("scene", "").strip() for row in rows if row.get("scene", "").strip()), manifest_path.stem)
+            modes = stream_modes - {"unknown"}
+            stream_mode = next(iter(modes)) if len(modes) == 1 else "unknown"
+            items.append(
+                CaptureGalleryItem(
+                    group=manifest_path.stem,
+                    scene=scene,
+                    stream_mode=stream_mode,
+                    frames_saved=len(rows),
+                    first_captured_at=timestamps[0] if timestamps else None,
+                    last_captured_at=timestamps[-1] if timestamps else None,
+                    note=next((row.get("note", "").strip() for row in rows if row.get("note", "").strip()), ""),
+                    manifest_name=manifest_path.name,
+                    latest_frame_name=latest_frame_name,
+                )
+            )
+
+        items.sort(key=lambda item: item.last_captured_at or "", reverse=True)
+        start = (page - 1) * page_size
+        return items[start : start + page_size]
+
+    def gallery_latest_frame_path(self, group: str) -> Path | None:
+        if not re.fullmatch(r"[0-9A-Za-z\u4e00-\u9fff_-]{1,160}", group):
+            raise ValueError("invalid capture group")
+        root = self.settings.capture_output_root.expanduser().resolve()
+        manifest_path = root / "manifests" / f"{group}.csv"
+        if not manifest_path.is_file():
+            return None
+        try:
+            with manifest_path.open("r", newline="", encoding="utf-8") as handle:
+                rows = [row for row in csv.DictReader(handle) if row.get("frame_path")]
+        except (OSError, UnicodeError, csv.Error) as exc:
+            raise RuntimeError(f"unable to read capture manifest: {manifest_path.name}") from exc
+
+        candidates: list[tuple[str, Path]] = []
+        for row in rows:
+            frame_path = Path(row["frame_path"]).expanduser().resolve()
+            if root in frame_path.parents and frame_path.is_file():
+                candidates.append((row.get("captured_at", ""), frame_path))
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item[0])[1]
 
     async def _read_stdout(self, stream: asyncio.StreamReader | None) -> None:
         if stream is None:

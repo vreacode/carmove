@@ -366,6 +366,27 @@ async def capture_status() -> dict:
     return capture_manager.status().model_dump()
 
 
+@app.get("/capture/gallery", dependencies=[Depends(verify_token)])
+async def capture_gallery(page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100)) -> list[dict]:
+    try:
+        return [item.model_dump() for item in capture_manager.list_gallery(page=page, page_size=page_size)]
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/capture/gallery/{group}/latest", dependencies=[Depends(verify_token)])
+async def capture_gallery_latest(group: str) -> FileResponse:
+    try:
+        path = capture_manager.gallery_latest_frame_path(group)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if path is None:
+        raise HTTPException(status_code=404, detail="capture group or frame not found")
+    return FileResponse(path, media_type="image/jpeg", filename=path.name)
+
+
 @app.post("/capture/start", dependencies=[Depends(verify_token)])
 async def capture_start(request: CaptureStartRequest) -> dict:
     try:
