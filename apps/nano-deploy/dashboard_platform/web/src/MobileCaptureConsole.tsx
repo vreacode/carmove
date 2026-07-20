@@ -68,6 +68,16 @@ function batteryLabel(status: SystemStatus | null) {
   return "已连接";
 }
 
+function batteryDetailLabel(status: SystemStatus | null) {
+  const battery = status?.battery_status;
+  if (!battery?.available) return "未知";
+  const details = [
+    battery.percentage != null ? `${battery.percentage.toFixed(0)}%` : null,
+    battery.voltage != null ? `${battery.voltage.toFixed(1)}V` : null,
+  ].filter(Boolean);
+  return details.join(" · ") || "已连接";
+}
+
 function Metric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "warn" }) {
   return (
     <div className={`mobile-metric mobile-metric-${tone}`}>
@@ -385,7 +395,7 @@ export default function MobileCaptureConsole() {
             <Metric label="雷达" value={status?.lidar_online ? "在线" : "停止"} tone={status?.lidar_online ? "good" : "neutral"} />
             <Metric label="IMU" value={status?.imu_online ? "在线" : "停止"} tone={status?.imu_online ? "good" : "neutral"} />
           </div>
-          <section className="mobile-detail-card"><div className="mobile-detail-row"><span>视频源</span><strong>{status?.current_video_source || "--"}</strong></div><div className="mobile-detail-row"><span>分辨率目标</span><strong>video1 / 可见光</strong></div><div className="mobile-detail-row"><span>云台状态</span><strong>{cameraStatus?.status?.motion_mode_name || "--"} · {cameraStatus?.attitude?.yaw_deg?.toFixed(1) ?? "--"}° yaw</strong></div><div className="mobile-detail-row"><span>电池</span><strong>{batteryLabel(status)}{status?.battery_status?.charging ? " · 充电中" : ""}</strong></div><div className="mobile-detail-row"><span>控制模式</span><strong>{status?.motion_state?.mode || "dry_run"}</strong></div></section>
+          <section className="mobile-detail-card"><div className="mobile-detail-row"><span>视频源</span><strong>{status?.current_video_source || "--"}</strong></div><div className="mobile-detail-row"><span>分辨率目标</span><strong>video1 / 可见光</strong></div><div className="mobile-detail-row"><span>云台状态</span><strong>{cameraStatus?.status?.motion_mode_name || "--"} · {cameraStatus?.attitude?.yaw_deg?.toFixed(1) ?? "--"}° yaw</strong></div><div className="mobile-detail-row"><span>电池</span><strong>{batteryDetailLabel(status)}{status?.battery_status?.charging ? " · 充电中" : ""}</strong></div><div className="mobile-detail-row"><span>控制模式</span><strong>{status?.motion_state?.mode || "dry_run"}</strong></div></section>
           <section className="mobile-safety-note"><CheckCircleIcon /><div><strong>安全闸门保持开启</strong><p>手机端第一版只控制采集、拍照和监控，不直接启动车辆或发送运动命令。</p></div></section>
         </div>
       ) : null}

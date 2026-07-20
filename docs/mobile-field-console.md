@@ -50,7 +50,7 @@ http://<Dashboard设备的Tailscale地址>:8080
 
 登录后可通过浏览器的“添加到主屏幕”安装成 PWA。第一版没有把运动控制放进手机页面；现有的 `ENABLE_MOTION_CONTROL=false`、`MOTION_CONTROL_MODE=dry_run` 和 ZT6 云台运动锁继续有效。
 
-底盘源码发布的 `PowerVoltage` 是电压而不是百分比。Agent 会只读订阅 `/PowerVoltage`、`/robot_charging_flag` 和 `/robot_charging_current`。按当前底盘实测经验，默认将 `20.0V` 设为低电压告警线；`19.5V` 是接近必定自动断电的硬件边界。若 `.env` 中没有配置 `BATTERY_EMPTY_VOLTAGE` 和 `BATTERY_FULL_VOLTAGE`，手机仍只显示实时电压，不会伪造百分比；确认电池规格后才显示百分比。当前 ROS/底盘停机时显示“未知”是正确状态，不代表电池没电。
+底盘源码发布的 `PowerVoltage` 是电压而不是百分比。Agent 会只读订阅 `/PowerVoltage`、`/robot_charging_flag` 和 `/robot_charging_current`。按当前底盘实测经验，默认按 `22.6V = 100%`、`20.0V = 0%` 换算；`20.0V` 是硬电压告警线，同时保留 `20%` 的提前预警，`19.5V` 是接近必定自动断电的硬件边界。电压先经过最近 5 次采样的中位数滤波，低电压状态需要连续 3 次确认，避免单次跳动影响手机显示或告警。当前 ROS/底盘停机时显示“未知”是正确状态，不代表电池没电。
 
 ## 本地验证
 

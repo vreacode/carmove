@@ -42,10 +42,12 @@ class AgentSettings(BaseSettings):
     battery_ros_setup_bash: str = "/opt/ros/humble/setup.bash"
     battery_python_bin: str = "python3"
     battery_stale_seconds: float = 10.0
-    battery_empty_voltage: float = 0.0
-    battery_full_voltage: float = 0.0
+    battery_empty_voltage: float = 20.0
+    battery_full_voltage: float = 22.6
     battery_low_voltage: float = 20.0
     battery_low_percentage: float = 20.0
+    battery_filter_window: int = 5
+    battery_low_confirm_samples: int = 3
     siyi_zt6_enabled: bool = True
     siyi_zt6_host: str = "10.16.16.10"
     siyi_zt6_port: int = 37260

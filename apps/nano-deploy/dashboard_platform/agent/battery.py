@@ -6,8 +6,11 @@ import os
 import shlex
 import signal
 import time
+from collections import deque
 from contextlib import suppress
+from math import isfinite
 from pathlib import Path
+from statistics import median
 
 from .config import AgentSettings
 from .logs import LogBuffer
@@ -25,6 +28,11 @@ class BatteryManager:
         self._stderr_task: asyncio.Task[None] | None = None
         self._wait_task: asyncio.Task[None] | None = None
         self.state = BatteryStatus(source=self.settings.battery_voltage_topic)
+        window = max(3, int(self.settings.battery_filter_window))
+        self._voltage_samples: deque[float] = deque(maxlen=window)
+        self._low_streak = 0
+        self._normal_streak = 0
+        self._low_state = False
 
     @staticmethod
     def percentage(voltage: float | None, empty_voltage: float, full_voltage: float) -> float | None:
@@ -32,15 +40,49 @@ class BatteryManager:
             return None
         return round(max(0.0, min(100.0, (voltage - empty_voltage) / (full_voltage - empty_voltage) * 100.0)), 1)
 
+    def _is_low_candidate(self, voltage: float) -> bool:
+        percentage = self.percentage(
+            voltage,
+            self.settings.battery_empty_voltage,
+            self.settings.battery_full_voltage,
+        )
+        return (
+            (self.settings.battery_low_voltage > 0 and voltage <= self.settings.battery_low_voltage)
+            or (percentage is not None and percentage <= self.settings.battery_low_percentage)
+        )
+
+    def _update_low_state(self, candidate: bool) -> None:
+        confirm_samples = max(1, int(self.settings.battery_low_confirm_samples))
+        if candidate:
+            self._low_streak += 1
+            self._normal_streak = 0
+            if self._low_streak >= confirm_samples:
+                self._low_state = True
+        else:
+            self._normal_streak += 1
+            self._low_streak = 0
+            if self._normal_streak >= confirm_samples:
+                self._low_state = False
+
+    def _record_voltage(self, raw_voltage: float, timestamp: float | None = None) -> None:
+        if not isfinite(raw_voltage) or raw_voltage < 0:
+            return
+        self._voltage_samples.append(raw_voltage)
+        filtered_voltage = round(float(median(self._voltage_samples)), 3)
+        self._update_low_state(self._is_low_candidate(filtered_voltage))
+        self.state = self.state.model_copy(update={
+            "voltage": filtered_voltage,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "updated_at_epoch": timestamp or time.time(),
+            "error": None,
+        })
+
     def status(self) -> BatteryStatus:
         state = self.state
         age = time.time() - state.updated_at_epoch if state.updated_at_epoch else float("inf")
         available = state.voltage is not None and age <= self.settings.battery_stale_seconds
         percentage = self.percentage(state.voltage, self.settings.battery_empty_voltage, self.settings.battery_full_voltage)
-        low = available and (
-            (self.settings.battery_low_voltage > 0 and state.voltage is not None and state.voltage <= self.settings.battery_low_voltage)
-            or (percentage is not None and percentage <= self.settings.battery_low_percentage)
-        )
+        low = available and self._low_state
         return state.model_copy(update={"available": available, "percentage": percentage, "low": low})
 
     def _command(self) -> list[str]:
@@ -92,13 +134,15 @@ class BatteryManager:
                 continue
             if payload.get("type") != "battery":
                 continue
+            raw_voltage = payload.get("voltage")
+            if raw_voltage is not None:
+                try:
+                    self._record_voltage(float(raw_voltage), float(payload.get("timestamp") or time.time()))
+                except (TypeError, ValueError):
+                    continue
             self.state = self.state.model_copy(update={
-                "voltage": payload.get("voltage"),
                 "charging": payload.get("charging"),
                 "charging_current": payload.get("charging_current"),
-                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                "updated_at_epoch": float(payload.get("timestamp") or time.time()),
-                "error": None,
             })
 
     async def _consume_stderr(self) -> None:
