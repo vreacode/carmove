@@ -13,8 +13,8 @@
   --color-primary: 30 41 59;   /* slate-800 */
   --color-secondary: 51 65 85; /* slate-700 */
   --color-tertiary: 71 85 105; /* slate-600 */
-  --color-muted: 100 116 139;  /* slate-500 */
-  --color-disabled: 148 163 184;/* slate-400 */
+  --color-muted: 71 85 105;     /* slate-600: AA text on light surfaces */
+  --color-disabled: 71 85 105;  /* slate-600: AA text on light surfaces */
   
   --color-accent-50: 240 249 255;  /* sky-50 */
   --color-accent-100: 224 242 254; /* sky-100 */
@@ -22,7 +22,7 @@
   --color-accent-300: 125 211 252; /* sky-300 */
   --color-accent-400: 56 189 248;  /* sky-400 */
   --color-accent-500: 14 165 233;  /* sky-500 */
-  --color-accent-600: 2 132 199;   /* sky-600 */
+  --color-accent-600: 3 105 161;   /* sky-700: AA text on light surfaces */
   
   color-scheme: light;
 }
@@ -38,8 +38,8 @@
   --color-primary: 248 250 252;   /* slate-50 */
   --color-secondary: 226 232 240; /* slate-200 */
   --color-tertiary: 203 213 225;  /* slate-300 */
-  --color-muted: 148 163 184;     /* slate-400 */
-  --color-disabled: 100 116 139;  /* slate-500 */
+  --color-muted: 203 213 225;     /* slate-300: AA text on dark surfaces */
+  --color-disabled: 203 213 225;  /* slate-300: AA text on dark surfaces */
   
   --color-accent-50: 8 47 73;     /* sky-950 */
   --color-accent-100: 12 74 110;  /* sky-900 */
@@ -63,8 +63,8 @@
   --color-primary: 41 37 36;   /* stone-800 */
   --color-secondary: 68 64 60; /* stone-700 */
   --color-tertiary: 87 83 78;  /* stone-600 */
-  --color-muted: 120 113 108;  /* stone-500 */
-  --color-disabled: 168 162 158;/* stone-400 */
+  --color-muted: 87 83 78;     /* stone-600: AA text on warm light surfaces */
+  --color-disabled: 87 83 78;  /* stone-600: AA text on warm light surfaces */
   
   --color-accent-50: 255 251 235;  /* amber-50 */
   --color-accent-100: 254 243 199; /* amber-100 */
@@ -72,7 +72,7 @@
   --color-accent-300: 252 211 77;  /* amber-300 */
   --color-accent-400: 251 191 36;  /* amber-400 */
   --color-accent-500: 245 158 11;  /* amber-500 */
-  --color-accent-600: 217 119 6;   /* amber-600 */
+  --color-accent-600: 180 83 9;    /* amber-700: AA text on warm light surfaces */
   
   color-scheme: light;
 }
@@ -109,18 +109,18 @@ select {
 /* Mobile field console: a compact, high-contrast control surface for outdoor use. */
 .mobile-auth,
 .mobile-app {
-  --mobile-ink: #e8efe9;
-  --mobile-muted: #8ea39b;
-  --mobile-dim: #60766d;
-  --mobile-page: #09110f;
-  --mobile-panel: #101c18;
-  --mobile-panel-raised: #16251f;
-  --mobile-line: rgba(205, 234, 220, 0.13);
-  --mobile-acid: #d9ff57;
-  --mobile-cyan: #86e8df;
-  --mobile-coral: #ff765f;
-  --mobile-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-  --mobile-sans: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mobile-ink: rgb(var(--color-primary));
+  --mobile-muted: rgb(var(--color-secondary));
+  --mobile-dim: rgb(var(--color-tertiary));
+  --mobile-page: rgb(var(--color-page));
+  --mobile-panel: rgb(var(--color-panel));
+  --mobile-panel-raised: rgb(var(--color-card));
+  --mobile-line: rgb(var(--color-divider));
+  --mobile-acid: rgb(var(--color-accent-600));
+  --mobile-cyan: rgb(var(--color-accent-500));
+  --mobile-coral: #be123c;
+  --mobile-mono: "Roboto Mono", "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --mobile-sans: "Inter", "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   color: var(--mobile-ink);
   font-family: var(--mobile-sans);
 }
@@ -224,8 +224,8 @@ select {
   justify-content: center;
   padding: 32px 24px;
   background:
-    radial-gradient(circle at 90% 8%, rgba(217, 255, 87, 0.14), transparent 33%),
-    radial-gradient(circle at 8% 92%, rgba(134, 232, 223, 0.09), transparent 28%),
+    radial-gradient(circle at 90% 8%, rgb(var(--color-accent-300) / 0.24), transparent 33%),
+    radial-gradient(circle at 8% 92%, rgb(var(--color-accent-200) / 0.22), transparent 28%),
     var(--mobile-page);
 }
 
@@ -236,7 +236,7 @@ select {
   inset: 0;
   pointer-events: none;
   opacity: 0.18;
-  background-image: linear-gradient(rgba(232, 239, 233, 0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(232, 239, 233, 0.055) 1px, transparent 1px);
+  background-image: linear-gradient(rgb(var(--color-accent-200) / 0.16) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--color-accent-200) / 0.16) 1px, transparent 1px);
   background-size: 32px 32px;
   mask-image: linear-gradient(to bottom, black, transparent 74%);
 }
@@ -255,9 +255,9 @@ select {
   display: grid;
   place-items: center;
   margin: 0 auto 28px;
-  border: 1px solid rgba(217, 255, 87, 0.55);
+  border: 1px solid rgb(var(--color-accent-400) / 0.55);
   color: var(--mobile-acid);
-  background: rgba(217, 255, 87, 0.08);
+  background: rgb(var(--color-accent-100) / 0.75);
   transform: rotate(-4deg);
 }
 
@@ -331,7 +331,7 @@ select {
   outline: none;
   padding: 0 13px;
   color: var(--mobile-ink);
-  background: rgba(16, 28, 24, 0.92);
+  background: rgb(var(--color-card) / 0.92);
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
@@ -339,7 +339,7 @@ select {
 .mobile-field input:focus,
 .mobile-field select:focus {
   border-color: var(--mobile-acid);
-  box-shadow: 0 0 0 3px rgba(217, 255, 87, 0.12);
+  box-shadow: 0 0 0 3px rgb(var(--color-accent-300) / 0.24);
   background: var(--mobile-panel-raised);
 }
 
@@ -367,8 +367,8 @@ select {
   overflow: hidden;
   padding: max(18px, env(safe-area-inset-top)) 16px calc(94px + env(safe-area-inset-bottom));
   background:
-    radial-gradient(circle at 100% 0%, rgba(217, 255, 87, 0.1), transparent 28%),
-    radial-gradient(circle at 0% 60%, rgba(134, 232, 223, 0.06), transparent 27%),
+    radial-gradient(circle at 100% 0%, rgb(var(--color-accent-300) / 0.18), transparent 28%),
+    radial-gradient(circle at 0% 60%, rgb(var(--color-accent-200) / 0.16), transparent 27%),
     var(--mobile-page);
 }
 
@@ -471,7 +471,7 @@ select {
 .mobile-status-dot.is-good,
 .mobile-video-state.is-good span {
   background: var(--mobile-acid);
-  box-shadow: 0 0 0 3px rgba(217, 255, 87, 0.1);
+  box-shadow: 0 0 0 3px rgb(var(--color-accent-300) / 0.16);
 }
 
 .mobile-status-dot.is-bad {
@@ -499,7 +499,7 @@ select {
 .mobile-archive-hero,
 .mobile-empty-state {
   border: 1px solid var(--mobile-line);
-  background: rgba(16, 28, 24, 0.9);
+  background: rgb(var(--color-panel) / 0.92);
 }
 
 .mobile-video-card {
@@ -579,7 +579,7 @@ select {
 }
 
 .mobile-capture-card.is-running {
-  border-color: rgba(217, 255, 87, 0.46);
+  border-color: rgb(var(--color-accent-300) / 0.72);
   box-shadow: inset 3px 0 0 var(--mobile-acid);
 }
 
@@ -607,9 +607,9 @@ select {
   height: 40px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(217, 255, 87, 0.25);
+  border: 1px solid rgb(var(--color-accent-300) / 0.55);
   color: var(--mobile-acid);
-  background: rgba(217, 255, 87, 0.07);
+  background: rgb(var(--color-accent-100) / 0.72);
 }
 
 .mobile-capture-orb.is-running {
@@ -682,7 +682,7 @@ select {
 
 .mobile-mode-switch button.is-active {
   color: var(--mobile-ink);
-  background: rgba(217, 255, 87, 0.12);
+  background: rgb(var(--color-accent-100) / 0.86);
   box-shadow: inset 3px 0 0 var(--mobile-acid);
 }
 
@@ -758,7 +758,7 @@ select {
 }
 
 .mobile-primary-button {
-  color: #17200d;
+  color: #fff;
   background: var(--mobile-acid);
 }
 
@@ -791,7 +791,7 @@ select {
 }
 
 .mobile-stop-button {
-  color: #260e0a;
+  color: #fff;
   background: var(--mobile-coral);
 }
 
@@ -1005,8 +1005,8 @@ select {
 
 .mobile-inline-error {
   padding: 10px;
-  border: 1px solid rgba(255, 118, 95, 0.35);
-  background: rgba(255, 118, 95, 0.08);
+  border: 1px solid rgb(225 29 72 / 0.35);
+  background: rgb(225 29 72 / 0.08);
 }
 
 .mobile-inline-error svg,
@@ -1025,8 +1025,8 @@ select {
 }
 
 .mobile-error-banner {
-  border: 1px solid rgba(255, 118, 95, 0.35);
-  background: rgba(255, 118, 95, 0.1);
+  border: 1px solid rgb(225 29 72 / 0.35);
+  background: rgb(225 29 72 / 0.1);
   text-align: left;
 }
 
@@ -1042,10 +1042,10 @@ select {
   bottom: calc(78px + env(safe-area-inset-bottom));
   z-index: 10;
   width: auto;
-  border: 1px solid rgba(217, 255, 87, 0.35);
+  border: 1px solid rgb(var(--color-accent-300) / 0.55);
   color: var(--mobile-acid);
-  background: rgba(16, 28, 24, 0.96);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  background: rgb(var(--color-panel) / 0.96);
+  box-shadow: 0 12px 30px rgb(15 23 42 / 0.16);
 }
 
 .mobile-bottom-nav {
@@ -1059,8 +1059,8 @@ select {
   overflow: hidden;
   border: 1px solid var(--mobile-line);
   border-radius: 3px;
-  background: rgba(16, 28, 24, 0.96);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  background: rgb(var(--color-panel) / 0.96);
+  box-shadow: 0 14px 34px rgb(15 23 42 / 0.16);
   backdrop-filter: blur(18px);
 }
 
@@ -1086,7 +1086,7 @@ select {
 
 .mobile-bottom-nav button.is-active {
   color: var(--mobile-acid);
-  background: rgba(217, 255, 87, 0.08);
+  background: rgb(var(--color-accent-100) / 0.82);
 }
 
 .mobile-bottom-nav svg {
@@ -1103,8 +1103,8 @@ select {
 }
 
 @keyframes mobile-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 255, 87, 0.03); }
-  50% { box-shadow: 0 0 0 9px rgba(217, 255, 87, 0.08); }
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--color-accent-300) / 0.05); }
+  50% { box-shadow: 0 0 0 9px rgb(var(--color-accent-300) / 0.18); }
 }
 
 @media (min-width: 520px) {

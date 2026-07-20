@@ -18,6 +18,7 @@ import {
   SwatchIcon,
 } from "@heroicons/react/24/outline";
 import { Panel } from "./components/Panel";
+import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
 import { VideoStream } from "./components/VideoStream";
 import { API_BASE, apiFetch, classNames, clearToken, formatNumber, loadToken, saveToken, wsUrl } from "./lib";
 import type { ConnectionState, LogItem, MapEntry, MapMetadata, MediaItem, MediaStatus, SiyiCameraStatus, StreamStats, SystemStatus } from "./types";
@@ -61,6 +62,7 @@ function describeError(error: unknown) {
 
 function App() {
   const [token, setToken] = useState(loadToken());
+  const [activeTab, setActiveTab] = useState<SidebarTab>("live");
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
   const [gimbalPending, setGimbalPending] = useState(false);
@@ -98,6 +100,12 @@ function App() {
   const [modePending, setModePending] = useState<"" | "dry_run" | "real">("");
   const [refreshingMaps, setRefreshingMaps] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
+
+  function selectTab(tab: SidebarTab) {
+    setActiveTab(tab);
+    const target = document.getElementById(`section-${tab}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const filteredLogs = useMemo(() => {
     if (logFilter === "all") return logs;
@@ -630,8 +638,10 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen px-5 py-5 lg:px-8">
-      <header className="mb-5 flex flex-col gap-4 rounded-xl border border-base bg-panel p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(125,211,252,.24),transparent_30%),linear-gradient(135deg,#edf5ff_0%,#f8fbff_48%,#e9f2fb_100%)] text-primary">
+      <SidebarMenu activeTab={activeTab} onChange={selectTab} />
+      <main className="min-w-0 flex-1 px-5 py-5 lg:px-8">
+      <header className="mb-6 flex flex-col gap-4 rounded-lg border border-base/70 bg-panel p-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-bold tracking-tight text-primary">Vehicle Intelligence Console</h1>
@@ -653,7 +663,7 @@ function App() {
       </header>
 
       <div className="space-y-5">
-        <div className="grid gap-5 xl:grid-cols-12">
+        <div id="section-live" className="scroll-mt-6 grid gap-5 xl:grid-cols-12">
           <div className="h-full xl:col-span-8">
             <Panel
               title="实时视频 (双光融合)"
@@ -873,7 +883,7 @@ function App() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-12">
+        <div id="section-navigation" className="scroll-mt-6 grid gap-5 xl:grid-cols-12">
           <div className="h-full xl:col-span-4">
             <Panel title="建图与导航" subtitle="管理建图、地图保存、导航与 RViz。" className="h-full min-h-[560px]">
               <div className="flex h-full flex-col">
@@ -977,6 +987,7 @@ function App() {
         </div>
 
 
+        <div id="section-diagnostics" className="scroll-mt-6">
         <Panel title="系统与底盘状态" subtitle="查看系统资源、底盘在线状态与控制模式。">
           <div className="grid gap-4 xl:grid-cols-4">
             <div className="rounded-xl border border-base bg-card/50 p-4">
@@ -1108,8 +1119,9 @@ function App() {
           </div>
           {status?.base_status?.last_error ? <p className="mt-3 text-sm text-amber-600">底盘提示：{status.base_status.last_error}</p> : null}
         </Panel>
+        </div>
 
-        <div className="grid gap-5 xl:grid-cols-12">
+        <div id="section-perception" className="scroll-mt-6 grid gap-5 xl:grid-cols-12">
           <Panel title="媒体与记录" subtitle="管理录像、拍照与 AI 检测历史记录。" className="h-full xl:col-span-5 flex flex-col">
             <div className="mb-4 grid grid-cols-2 gap-3">
               <StatCard label="录像状态" value={mediaStatus?.recording_running ? "recording" : "idle"} />
@@ -1267,6 +1279,7 @@ function App() {
         </div>
 
       </div>
+      </main>
     </div>
   );
 }

@@ -22,7 +22,7 @@ export default {
           500: "rgb(var(--color-accent-500) / <alpha-value>)",
           600: "rgb(var(--color-accent-600) / <alpha-value>)",
         },
-        danger: "#de6f74",
+        danger: "#b91c1c",
       },
       boxShadow: {
         panel: "0 18px 42px rgba(120, 155, 188, 0.16)",
