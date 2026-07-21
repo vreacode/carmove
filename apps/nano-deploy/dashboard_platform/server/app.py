@@ -552,16 +552,19 @@ async def api_webrtc_offer(payload: WebRTCOffer, _: str = Depends(require_token)
 async def api_stream_fallback(
     authorization: str | None = Header(default=None),
     token: str | None = Query(default=None),
+    mode: str = Query(default="visible_raw"),
 ) -> StreamingResponse:
     header_token = _extract_token(authorization)
     if header_token != settings.auth_token and token != settings.auth_token:
         raise HTTPException(status_code=403, detail="invalid token")
+    selected_mode = mode if mode in {"visible_raw", "ir_raw"} else "visible_raw"
 
     async def generate():
         async with bridge.client.stream(
             "GET",
             f"{bridge.base_url}/preview.mjpeg",
             headers={"Authorization": f"Bearer {bridge.token}"},
+            params={"mode": selected_mode},
             timeout=None,
         ) as response:
             response.raise_for_status()

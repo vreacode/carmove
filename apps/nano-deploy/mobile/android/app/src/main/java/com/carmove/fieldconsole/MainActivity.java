@@ -14,8 +14,9 @@ import android.os.Looper;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
-import android.view.Window;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -25,6 +26,7 @@ import android.widget.Spinner;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -71,8 +73,10 @@ public class MainActivity extends Activity {
     private String dashboardUrl = "";
     private String authToken = "";
     private boolean dashboardVisible = false;
-    private boolean streamRunning = false;
-    private HttpURLConnection activeStreamConnection;
+    private volatile boolean streamRunning = false;
+    private volatile HttpURLConnection activeStreamConnection;
+    private volatile int streamGeneration = 0;
+    private String streamMode = "visible_raw";
     private Runnable pollRunnable;
 
     private TextView connectionValue;
@@ -94,6 +98,10 @@ public class MainActivity extends Activity {
     private Button startCaptureButton;
     private Button stopCaptureButton;
     private Button snapshotButton;
+    private LinearLayout historyContainer;
+    private TextView historySummary;
+    private Button refreshHistoryButton;
+    private final AtomicBoolean historyRequestInFlight = new AtomicBoolean(false);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -309,6 +317,7 @@ public class MainActivity extends Activity {
 
     private void showDashboard() {
         dashboardVisible = true;
+        streamMode = "visible_raw";
         stopPolling();
         stopMjpegStream();
 
@@ -375,6 +384,23 @@ public class MainActivity extends Activity {
         ArrayAdapter<String> modeAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, new String[]{"可见光", "红外"});
         modeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         streamModeInput.setAdapter(modeAdapter);
+        streamModeInput.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String nextMode = position == 1 ? "ir_raw" : "visible_raw";
+                if (nextMode.equals(streamMode)) return;
+                streamMode = nextMode;
+                if (dashboardVisible) {
+                    stopMjpegStream();
+                    startMjpegStream();
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // Keep the last selected source when the spinner temporarily has no selection.
+            }
+        });
         capture.addView(streamModeInput, params(-1, dp(46), 0, 0, 0, 8));
         sceneInput = input("gate_a_day", "场景名称", false);
         capture.addView(sceneInput, params(-1, dp(46), 0, 0, 0, 8));
@@ -436,6 +462,29 @@ public class MainActivity extends Activity {
         controls.addView(emergency, params(-1, dp(48), 0, 8, 0, 0));
         addRow(root, controls, 0, 12);
 
+        LinearLayout history = section("采集记录", "已完成的采集段按场景归档，点击刷新查看最近一帧。");
+        LinearLayout historyHeader = new LinearLayout(this);
+        historyHeader.setGravity(Gravity.CENTER_VERTICAL);
+        historySummary = text("尚未加载", 11, MUTED);
+        historyHeader.addView(historySummary, params(0, -2, 0, 0, 6, 0));
+        ((LinearLayout.LayoutParams) historySummary.getLayoutParams()).weight = 1f;
+        refreshHistoryButton = actionButton("刷新记录", PANEL, ACCENT);
+        refreshHistoryButton.setTextSize(12);
+        refreshHistoryButton.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
+        refreshHistoryButton.setBackground(background(PANEL, BASE, 7));
+        historyHeader.addView(refreshHistoryButton, params(dp(88), dp(38)));
+        history.addView(historyHeader, params(-1, dp(40), 0, 0, 0, 8));
+        historyContainer = new LinearLayout(this);
+        historyContainer.setOrientation(LinearLayout.VERTICAL);
+        history.addView(historyContainer, params(-1, -2));
+        refreshHistoryButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                loadCaptureHistory();
+            }
+        });
+        addRow(root, history, 0, 12);
+
         statusMessage = text("等待状态刷新…", 12, MUTED);
         statusMessage.setGravity(Gravity.CENTER);
         root.addView(statusMessage, params(-1, -2, 0, 4, 0, 0));
@@ -443,6 +492,7 @@ public class MainActivity extends Activity {
 
         startPolling();
         startMjpegStream();
+        loadCaptureHistory();
     }
 
     private void addWeighted(LinearLayout parent, View child, int left, int right, int end) {
@@ -490,6 +540,163 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(0, -1, 1f);
         layoutParams.setMargins(0, 0, withMargin ? dp(6) : 0, 0);
         parent.addView(button, layoutParams);
+    }
+
+    private void loadCaptureHistory() {
+        if (historyContainer == null || !dashboardVisible) return;
+        if (!historyRequestInFlight.compareAndSet(false, true)) return;
+        if (refreshHistoryButton != null) {
+            refreshHistoryButton.setEnabled(false);
+            refreshHistoryButton.setText("加载中…");
+        }
+        if (historySummary != null) historySummary.setText("正在读取采集记录…");
+        networkExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String response = request(dashboardUrl + "/api/capture/gallery?page=1&page_size=12", "GET", authToken, null);
+                    String trimmed = response.trim();
+                    final JSONArray items;
+                    if (trimmed.startsWith("[")) {
+                        items = new JSONArray(trimmed);
+                    } else {
+                        JSONArray wrappedItems = new JSONObject(trimmed).optJSONArray("items");
+                        items = wrappedItems == null ? new JSONArray() : wrappedItems;
+                    }
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            renderCaptureHistory(items);
+                        }
+                    });
+                } catch (final Exception error) {
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (historySummary != null) historySummary.setText("读取失败");
+                            showMessage("采集记录读取失败：" + explain(error), true);
+                        }
+                    });
+                } finally {
+                    historyRequestInFlight.set(false);
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (refreshHistoryButton != null) {
+                                refreshHistoryButton.setEnabled(true);
+                                refreshHistoryButton.setText("刷新记录");
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    private void renderCaptureHistory(JSONArray items) {
+        if (historyContainer == null) return;
+        historyContainer.removeAllViews();
+        int count = items == null ? 0 : items.length();
+        historySummary.setText(count == 0 ? "暂无已完成采集" : count + " 段已完成");
+        if (count == 0) {
+            TextView empty = text("完成一次采集后，最近一帧和 manifest 会显示在这里。", 12, MUTED);
+            historyContainer.addView(empty, params(-1, -2, 0, 4, 0, 4));
+            return;
+        }
+
+        for (int index = 0; index < count; index++) {
+            JSONObject item = items.optJSONObject(index);
+            if (item == null) continue;
+            String group = item.optString("group", "");
+            String scene = item.optString("scene", "未命名场景");
+            String mode = historyModeLabel(item.optString("stream_mode", "unknown"));
+            int frames = item.optInt("frames_saved", 0);
+            String capturedAt = formatHistoryTime(item.optString("last_captured_at", ""));
+            String note = item.optString("note", "").trim();
+            if (note.isEmpty()) note = item.optString("manifest_name", "manifest 未命名");
+
+            LinearLayout historyItem = new LinearLayout(this);
+            historyItem.setOrientation(LinearLayout.HORIZONTAL);
+            historyItem.setGravity(Gravity.CENTER_VERTICAL);
+            historyItem.setPadding(dp(10), dp(10), dp(10), dp(10));
+            historyItem.setBackground(background(CARD, BASE, 8));
+
+            ImageView thumbnail = new ImageView(this);
+            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            thumbnail.setBackgroundColor(BASE);
+            thumbnail.setContentDescription(scene + " 最近一帧");
+            thumbnail.setTag(group);
+            historyItem.addView(thumbnail, params(dp(96), dp(72)));
+
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            TextView title = text(scene, 14, PRIMARY);
+            title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            body.addView(title, params(-1, -2));
+            body.addView(text(mode + " · " + frames + " 帧 · " + capturedAt, 11, MUTED), params(-1, -2, 0, 4, 0, 0));
+            body.addView(text(note, 11, SECONDARY), params(-1, -2, 0, 5, 0, 0));
+            LinearLayout.LayoutParams bodyParams = params(0, -2, 9, 0, 0, 0);
+            bodyParams.weight = 1f;
+            historyItem.addView(body, bodyParams);
+            historyContainer.addView(historyItem, params(-1, -2, 0, 0, 0, 8));
+
+            if (!group.isEmpty() && !item.optString("latest_frame_name", "").isEmpty()) {
+                loadHistoryThumbnail(group, thumbnail);
+            }
+        }
+    }
+
+    private String historyModeLabel(String mode) {
+        if ("ir_raw".equals(mode)) return "红外";
+        if ("visible_raw".equals(mode)) return "可见光";
+        return "来源未标记";
+    }
+
+    private String formatHistoryTime(String value) {
+        if (value == null || value.isEmpty()) return "时间未知";
+        String result = value.replace('T', ' ');
+        int plus = result.indexOf('+');
+        if (plus > 0) result = result.substring(0, plus);
+        int dot = result.indexOf('.');
+        if (dot > 0) result = result.substring(0, dot);
+        return result;
+    }
+
+    private void loadHistoryThumbnail(final String group, final ImageView imageView) {
+        networkExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    byte[] imageBytes = requestBytes(
+                            dashboardUrl + "/api/capture/gallery/" + Uri.encode(group) + "/latest",
+                            authToken
+                    );
+                    final Bitmap bitmap = decodeThumbnail(imageBytes, dp(96), dp(72));
+                    if (bitmap == null) return;
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (group.equals(imageView.getTag())) imageView.setImageBitmap(bitmap);
+                        }
+                    });
+                } catch (Exception ignored) {
+                    // Keep the neutral thumbnail when a session frame has been removed or is unavailable.
+                }
+            }
+        });
+    }
+
+    private Bitmap decodeThumbnail(byte[] bytes, int targetWidth, int targetHeight) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+        int sample = 1;
+        while (bounds.outWidth / sample > targetWidth * 2 || bounds.outHeight / sample > targetHeight * 2) {
+            sample *= 2;
+        }
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sample;
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
     }
 
     private void login(final String url, final String username, final String password) {
@@ -704,6 +911,7 @@ public class MainActivity extends Activity {
                         public void run() {
                             showMessage(successMessage, false);
                             refreshStatus();
+                            if (path.startsWith("/api/capture/")) loadCaptureHistory();
                         }
                     });
                 } catch (final Exception error) {
@@ -762,16 +970,49 @@ public class MainActivity extends Activity {
         return new String(output.toByteArray(), StandardCharsets.UTF_8);
     }
 
+    private byte[] requestBytes(String urlValue, String bearer) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(urlValue).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(6000);
+        connection.setReadTimeout(10000);
+        connection.setUseCaches(false);
+        if (bearer != null && !bearer.isEmpty()) {
+            connection.setRequestProperty("Authorization", "Bearer " + bearer);
+        }
+        int code = connection.getResponseCode();
+        InputStream stream = code >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        byte[] response = stream == null ? new byte[0] : readBytes(stream);
+        connection.disconnect();
+        if (code < 200 || code >= 300) {
+            throw new IOException("HTTP " + code);
+        }
+        return response;
+    }
+
+    private byte[] readBytes(InputStream stream) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = stream.read(buffer)) != -1) {
+            output.write(buffer, 0, count);
+        }
+        stream.close();
+        return output.toByteArray();
+    }
+
     private void startMjpegStream() {
         streamRunning = true;
+        final int generation = ++streamGeneration;
+        final String requestedMode = streamMode;
         streamExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                while (streamRunning && dashboardVisible) {
+                while (streamRunning && dashboardVisible && generation == streamGeneration) {
                     HttpURLConnection connection = null;
                     try {
                         String queryToken = URLEncoder.encode(authToken, "UTF-8");
-                        URL url = new URL(dashboardUrl + "/api/stream/fallback?token=" + queryToken + "&mode=visible_raw");
+                        String queryMode = URLEncoder.encode(requestedMode, "UTF-8");
+                        URL url = new URL(dashboardUrl + "/api/stream/fallback?token=" + queryToken + "&mode=" + queryMode);
                         connection = (HttpURLConnection) url.openConnection();
                         activeStreamConnection = connection;
                         connection.setConnectTimeout(6000);
@@ -784,17 +1025,18 @@ public class MainActivity extends Activity {
                         mainHandler.post(new Runnable() {
                             @Override
                             public void run() {
-                                if (videoState != null) videoState.setText("视频流已连接，等待画面…");
+                                if (videoState != null && generation == streamGeneration) videoState.setText("视频流已连接，等待画面…");
                             }
                         });
-                        readMjpeg(connection.getInputStream());
+                        readMjpeg(connection.getInputStream(), generation, requestedMode);
                     } catch (final Exception error) {
                         mainHandler.post(new Runnable() {
                             @Override
                             public void run() {
-                                if (videoState != null && dashboardVisible) videoState.setText("视频重连中：" + explain(error));
+                                if (videoState != null && dashboardVisible && generation == streamGeneration) videoState.setText("视频重连中：" + explain(error));
                             }
                         });
+                        if (!streamRunning || !dashboardVisible || generation != streamGeneration) return;
                         try {
                             Thread.sleep(1500);
                         } catch (InterruptedException interrupted) {
@@ -803,18 +1045,18 @@ public class MainActivity extends Activity {
                         }
                     } finally {
                         if (connection != null) connection.disconnect();
-                        activeStreamConnection = null;
+                        if (activeStreamConnection == connection) activeStreamConnection = null;
                     }
                 }
             }
         });
     }
 
-    private void readMjpeg(InputStream stream) throws IOException {
+    private void readMjpeg(InputStream stream, final int generation, final String requestedMode) throws IOException {
         ByteArrayOutputStream frame = null;
         int previous = -1;
         int current;
-        while (streamRunning && (current = stream.read()) != -1) {
+        while (streamRunning && generation == streamGeneration && (current = stream.read()) != -1) {
             if (frame == null) {
                 if (previous == 0xFF && current == 0xD8) {
                     frame = new ByteArrayOutputStream();
@@ -829,11 +1071,11 @@ public class MainActivity extends Activity {
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            if (videoView == null || !dashboardVisible) return;
+                            if (videoView == null || !dashboardVisible || generation != streamGeneration) return;
                             Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
                             if (bitmap != null) {
                                 videoView.setImageBitmap(bitmap);
-                                videoState.setText("可见光 / 原生 MJPEG");
+                                videoState.setText(("ir_raw".equals(requestedMode) ? "红外" : "可见光") + " / 原生 MJPEG");
                             }
                         }
                     });
@@ -846,6 +1088,7 @@ public class MainActivity extends Activity {
 
     private void stopMjpegStream() {
         streamRunning = false;
+        streamGeneration++;
         if (activeStreamConnection != null) {
             activeStreamConnection.disconnect();
             activeStreamConnection = null;
