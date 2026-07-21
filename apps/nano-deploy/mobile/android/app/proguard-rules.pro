@@ -1,2 +1,1 @@
-# The native MVP does not embed a WebView or JavaScript bridge.
--keep class org.webrtc.** { *; }
+# The Android shell delegates the live console UI to the Dashboard WebView.
