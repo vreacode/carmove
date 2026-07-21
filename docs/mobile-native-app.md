@@ -19,6 +19,14 @@ Android 端已经从 WebView 壳开始迁移为原生 MVP。桌面端 React/Vite
 apps/nano-deploy/mobile/android
 ```
 
+首次构建先生成本机专属的 `local.properties`（这个文件不提交到 Git）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\create-local-properties.ps1
+```
+
+脚本优先读取 `ANDROID_SDK_ROOT` 或 `ANDROID_HOME`，否则使用 Android Studio 默认目录 `%LOCALAPPDATA%\Android\Sdk`。
+
 执行：
 
 ```bat

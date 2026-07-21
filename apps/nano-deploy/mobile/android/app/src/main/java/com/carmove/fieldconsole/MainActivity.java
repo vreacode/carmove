@@ -93,6 +93,7 @@ public class MainActivity extends Activity {
     private Button loginButton;
     private Button startCaptureButton;
     private Button stopCaptureButton;
+    private Button snapshotButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
