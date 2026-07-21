@@ -28,13 +28,13 @@ import android.widget.TextView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.webrtc.SurfaceViewRenderer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -67,21 +67,19 @@ public class MainActivity extends Activity {
     private SharedPreferences preferences;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
-    private final ExecutorService streamExecutor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean statusRequestInFlight = new AtomicBoolean(false);
 
     private String dashboardUrl = "";
     private String authToken = "";
     private boolean dashboardVisible = false;
-    private volatile boolean streamRunning = false;
-    private volatile HttpURLConnection activeStreamConnection;
-    private volatile int streamGeneration = 0;
+    private boolean webRtcStarted = false;
     private String streamMode = "visible_raw";
     private Runnable pollRunnable;
 
     private TextView connectionValue;
     private TextView videoState;
-    private ImageView videoView;
+    private SurfaceViewRenderer videoRenderer;
+    private NativeWebRtcReceiver videoReceiver;
     private TextView batteryValue;
     private TextView batteryDetail;
     private TextView baseValue;
@@ -177,7 +175,7 @@ public class MainActivity extends Activity {
     private void showConfiguration(String existingUrl) {
         dashboardVisible = false;
         stopPolling();
-        stopMjpegStream();
+        releaseWebRtcStream();
 
         LinearLayout root = baseLayout();
         addText(root, "CARMOVE / NATIVE ANDROID", 11, ACCENT, 0, 0);
@@ -319,7 +317,7 @@ public class MainActivity extends Activity {
         dashboardVisible = true;
         streamMode = "visible_raw";
         stopPolling();
-        stopMjpegStream();
+        stopWebRtcStream();
 
         LinearLayout root = baseLayout();
         root.setPadding(dp(14), dp(14), dp(14), dp(24));
@@ -348,11 +346,10 @@ public class MainActivity extends Activity {
         toolbar.addView(settingsButton, params(dp(56), dp(40)));
         root.addView(toolbar, params(-1, dp(48), 0, 0, 0, 12));
 
-        LinearLayout videoCard = section("实时画面", "原生 ImageView 播放低延时备用流；WebRTC 原生接入将在下一阶段替换。");
-        videoView = new ImageView(this);
-        videoView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        videoView.setBackgroundColor(Color.rgb(15, 23, 42));
-        videoCard.addView(videoView, params(-1, dp(218), 0, 0, 0, 8));
+        LinearLayout videoCard = section("实时画面", "原生 WebRTC 接收器直出视频轨道，不再使用 MJPEG 或逐帧 JPEG 解码。");
+        videoRenderer = new SurfaceViewRenderer(this);
+        videoRenderer.setBackgroundColor(Color.rgb(15, 23, 42));
+        videoCard.addView(videoRenderer, params(-1, dp(218), 0, 0, 0, 8));
         videoState = text("视频等待连接", 11, MUTED);
         videoState.setGravity(Gravity.CENTER_VERTICAL);
         videoCard.addView(videoState, params(-1, -2));
@@ -391,8 +388,7 @@ public class MainActivity extends Activity {
                 if (nextMode.equals(streamMode)) return;
                 streamMode = nextMode;
                 if (dashboardVisible) {
-                    stopMjpegStream();
-                    startMjpegStream();
+                    restartWebRtcStream();
                 }
             }
 
@@ -491,7 +487,8 @@ public class MainActivity extends Activity {
         setContentView(scrollRoot(root));
 
         startPolling();
-        startMjpegStream();
+        videoReceiver = new NativeWebRtcReceiver(this, videoRenderer);
+        startWebRtcStream();
         loadCaptureHistory();
     }
 
@@ -1000,99 +997,60 @@ public class MainActivity extends Activity {
         return output.toByteArray();
     }
 
-    private void startMjpegStream() {
-        streamRunning = true;
-        final int generation = ++streamGeneration;
+    private void startWebRtcStream() {
+        if (!dashboardVisible || videoReceiver == null) return;
+        if (webRtcStarted) return;
+        webRtcStarted = true;
         final String requestedMode = streamMode;
-        streamExecutor.submit(new Runnable() {
+        videoReceiver.start(requestedMode, new NativeWebRtcReceiver.SignalingClient() {
             @Override
-            public void run() {
-                while (streamRunning && dashboardVisible && generation == streamGeneration) {
-                    HttpURLConnection connection = null;
-                    try {
-                        String queryToken = URLEncoder.encode(authToken, "UTF-8");
-                        String queryMode = URLEncoder.encode(requestedMode, "UTF-8");
-                        URL url = new URL(dashboardUrl + "/api/stream/fallback?token=" + queryToken + "&mode=" + queryMode);
-                        connection = (HttpURLConnection) url.openConnection();
-                        activeStreamConnection = connection;
-                        connection.setConnectTimeout(6000);
-                        connection.setReadTimeout(0);
-                        connection.setUseCaches(false);
-                        int code = connection.getResponseCode();
-                        if (code < 200 || code >= 300) {
-                            throw new IOException("视频接口 HTTP " + code);
+            public String createAnswer(String sdp, String type, String streamMode) throws Exception {
+                JSONObject body = new JSONObject();
+                body.put("sdp", sdp);
+                body.put("type", type);
+                body.put("stream_mode", streamMode);
+                return request(dashboardUrl + "/api/stream/webrtc-offer", "POST", authToken, body.toString());
+            }
+        }, new NativeWebRtcReceiver.Listener() {
+            @Override
+            public void onState(final String state, final String detail) {
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (videoState == null || !dashboardVisible || !requestedMode.equals(streamMode)) return;
+                        videoState.setText(detail);
+                        videoState.setTextColor("failed".equals(state) ? DANGER : "connected".equals(state) ? GOOD : MUTED);
+                        if ("failed".equals(state)) {
+                            webRtcStarted = false;
+                            mainHandler.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (dashboardVisible && requestedMode.equals(streamMode)) startWebRtcStream();
+                                }
+                            }, 1500);
                         }
-                        mainHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (videoState != null && generation == streamGeneration) videoState.setText("视频流已连接，等待画面…");
-                            }
-                        });
-                        readMjpeg(connection.getInputStream(), generation, requestedMode);
-                    } catch (final Exception error) {
-                        mainHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (videoState != null && dashboardVisible && generation == streamGeneration) videoState.setText("视频重连中：" + explain(error));
-                            }
-                        });
-                        if (!streamRunning || !dashboardVisible || generation != streamGeneration) return;
-                        try {
-                            Thread.sleep(1500);
-                        } catch (InterruptedException interrupted) {
-                            Thread.currentThread().interrupt();
-                            return;
-                        }
-                    } finally {
-                        if (connection != null) connection.disconnect();
-                        if (activeStreamConnection == connection) activeStreamConnection = null;
                     }
-                }
+                });
             }
         });
     }
 
-    private void readMjpeg(InputStream stream, final int generation, final String requestedMode) throws IOException {
-        ByteArrayOutputStream frame = null;
-        int previous = -1;
-        int current;
-        while (streamRunning && generation == streamGeneration && (current = stream.read()) != -1) {
-            if (frame == null) {
-                if (previous == 0xFF && current == 0xD8) {
-                    frame = new ByteArrayOutputStream();
-                    frame.write(0xFF);
-                    frame.write(0xD8);
-                }
-            } else {
-                frame.write(current);
-                if (previous == 0xFF && current == 0xD9) {
-                    final byte[] imageBytes = frame.toByteArray();
-                    frame = null;
-                    mainHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (videoView == null || !dashboardVisible || generation != streamGeneration) return;
-                            Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-                            if (bitmap != null) {
-                                videoView.setImageBitmap(bitmap);
-                                videoState.setText(("ir_raw".equals(requestedMode) ? "红外" : "可见光") + " / 原生 MJPEG");
-                            }
-                        }
-                    });
-                }
-            }
-            previous = current;
-        }
-        stream.close();
+    private void restartWebRtcStream() {
+        stopWebRtcStream();
+        startWebRtcStream();
     }
 
-    private void stopMjpegStream() {
-        streamRunning = false;
-        streamGeneration++;
-        if (activeStreamConnection != null) {
-            activeStreamConnection.disconnect();
-            activeStreamConnection = null;
+    private void stopWebRtcStream() {
+        webRtcStarted = false;
+        if (videoReceiver != null) videoReceiver.stop();
+    }
+
+    private void releaseWebRtcStream() {
+        if (videoReceiver != null) {
+            videoReceiver.release();
+            videoReceiver = null;
         }
+        videoRenderer = null;
     }
 
     private String explain(Exception error) {
@@ -1122,14 +1080,14 @@ public class MainActivity extends Activity {
         super.onResume();
         if (dashboardVisible) {
             startPolling();
-            if (!streamRunning) startMjpegStream();
+            startWebRtcStream();
         }
     }
 
     @Override
     protected void onPause() {
         stopPolling();
-        stopMjpegStream();
+        stopWebRtcStream();
         super.onPause();
     }
 
@@ -1137,9 +1095,8 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         dashboardVisible = false;
         stopPolling();
-        stopMjpegStream();
+        releaseWebRtcStream();
         networkExecutor.shutdownNow();
-        streamExecutor.shutdownNow();
         super.onDestroy();
     }
 
