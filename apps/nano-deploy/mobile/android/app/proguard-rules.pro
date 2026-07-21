@@ -1,1 +1,1 @@
-# The WebView shell intentionally keeps JavaScript and WebView bridge classes unobfuscated.
+# The native MVP does not embed a WebView or JavaScript bridge.
