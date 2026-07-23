@@ -58,6 +58,15 @@ class ControlRequest(BaseModel):
     speed: str = "medium"
 
 
+class CruiseStartRequest(BaseModel):
+    speed: Literal["low", "medium", "high"] = "medium"
+    auto_arm: bool = False
+
+
+class CruiseSteeringRequest(BaseModel):
+    direction: Literal["center", "left", "right"] = "center"
+
+
 class GimbalPulseRequest(BaseModel):
     yaw_speed: int = Field(default=0, ge=-100, le=100)
     pitch_speed: int = Field(default=0, ge=-100, le=100)
@@ -79,6 +88,12 @@ class MotionModeRequest(BaseModel):
 class PresetRequest(BaseModel):
     name: str
     variables: dict[str, str] = {}
+
+
+class NavigationPointRequest(BaseModel):
+    x: float
+    y: float
+    yaw: float = 0.0
 
 
 class MediaRecordingStartRequest(BaseModel):
@@ -220,6 +235,64 @@ async def api_control_send(payload: ControlRequest, _: str = Depends(require_tok
         raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
 
 
+@app.post("/api/control/cruise/start")
+async def api_control_cruise_start(payload: CruiseStartRequest, _: str = Depends(require_token)) -> dict:
+    await hub.broadcast_log(hub.log("control", "info", f"cruise start request: {payload.speed}"))
+    try:
+        return await bridge.fetch_json("POST", "/control/cruise/start", json=payload.model_dump())
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "cruise start request failed"
+        try:
+            parsed = exc.response.json()
+            detail = parsed.get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
+@app.post("/api/control/cruise/steer")
+async def api_control_cruise_steer(payload: CruiseSteeringRequest, _: str = Depends(require_token)) -> dict:
+    try:
+        return await bridge.fetch_json("POST", "/control/cruise/steer", json=payload.model_dump())
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "cruise steering request failed"
+        try:
+            parsed = exc.response.json()
+            detail = parsed.get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
+@app.post("/api/control/cruise/heartbeat")
+async def api_control_cruise_heartbeat(_: str = Depends(require_token)) -> dict:
+    try:
+        return await bridge.fetch_json("POST", "/control/cruise/heartbeat")
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "cruise heartbeat failed"
+        try:
+            parsed = exc.response.json()
+            detail = parsed.get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
+@app.post("/api/control/cruise/stop")
+async def api_control_cruise_stop(_: str = Depends(require_token)) -> dict:
+    await hub.broadcast_log(hub.log("control", "warning", "cruise stop requested"))
+    try:
+        return await bridge.fetch_json("POST", "/control/cruise/stop")
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "cruise stop request failed"
+        try:
+            parsed = exc.response.json()
+            detail = parsed.get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
 @app.get("/api/control/state")
 async def api_control_state(_: str = Depends(require_token)) -> dict:
     return await bridge.fetch_json("GET", "/control/state")
@@ -319,6 +392,42 @@ async def api_preset_run(payload: PresetRequest, _: str = Depends(require_token)
         raise HTTPException(status_code=504, detail=f"preset '{payload.name}' timed out") from exc
 
 
+@app.get("/api/navigation/status")
+async def api_navigation_status(_: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("GET", "/navigation/status")
+
+
+@app.post("/api/navigation/initial-pose")
+async def api_navigation_initial_pose(payload: NavigationPointRequest, _: str = Depends(require_token)) -> dict:
+    try:
+        return await bridge.fetch_json("POST", "/navigation/initial-pose", json=payload.model_dump())
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "initial pose request failed"
+        try:
+            detail = exc.response.json().get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
+@app.post("/api/navigation/goal")
+async def api_navigation_goal(payload: NavigationPointRequest, _: str = Depends(require_token)) -> dict:
+    try:
+        return await bridge.fetch_json("POST", "/navigation/goal", json=payload.model_dump())
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "navigation goal request failed"
+        try:
+            detail = exc.response.json().get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
+@app.post("/api/navigation/goal/cancel")
+async def api_navigation_goal_cancel(_: str = Depends(require_token)) -> dict:
+    return await bridge.fetch_json("POST", "/navigation/goal/cancel")
+
+
 @app.get("/api/maps")
 async def api_maps(_: str = Depends(require_token)) -> dict:
     items = await bridge.fetch_json("GET", "/maps")
@@ -384,6 +493,36 @@ async def api_capture_gallery_latest(
         async with bridge.client.stream(
             "GET",
             f"{bridge.base_url}/capture/gallery/{group}/latest",
+            headers={"Authorization": f"Bearer {bridge.token}"},
+            timeout=None,
+        ) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes():
+                yield chunk
+
+    return StreamingResponse(generate(), media_type="image/jpeg")
+
+
+@app.get("/api/capture/gallery/{group}/frames")
+async def api_capture_gallery_frames(group: str, _: str = Depends(require_token)) -> dict:
+    return {"items": await bridge.fetch_json("GET", f"/capture/gallery/{group}/frames")}
+
+
+@app.get("/api/capture/gallery/{group}/frames/{frame_name}")
+async def api_capture_gallery_frame(
+    group: str,
+    frame_name: str,
+    authorization: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+) -> StreamingResponse:
+    header_token = _extract_token(authorization)
+    if header_token != settings.auth_token and token != settings.auth_token:
+        raise HTTPException(status_code=403, detail="invalid token")
+
+    async def generate():
+        async with bridge.client.stream(
+            "GET",
+            f"{bridge.base_url}/capture/gallery/{group}/frames/{frame_name}",
             headers={"Authorization": f"Bearer {bridge.token}"},
             timeout=None,
         ) as response:

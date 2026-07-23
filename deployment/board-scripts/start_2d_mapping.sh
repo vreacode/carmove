@@ -81,7 +81,7 @@ run_cmd "pcl2scan" \
      --ros-args \
      --remap cloud_in:=/c16/lslidar_point_cloud \
      --remap scan:=/scan \
-     -p target_frame:=laser_link \
+     -p target_frame:=laser \
      -p min_height:=-0.15 -p max_height:=0.20 \
      -p range_min:=0.1 -p range_max:=30.0 \
      -p scan_time:=0.1"
@@ -112,8 +112,8 @@ else
   run_cmd "slam_toolbox" \
     "source /opt/ros/humble/setup.bash && \
      source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && \
-     ros2 run slam_toolbox sync_slam_toolbox_node \
-       --ros-args --params-file /home/nvidia/Desktop/wheeltec_ros2/config/slam_toolbox_balanced.yaml"
+     ros2 run slam_toolbox async_slam_toolbox_node \
+       --ros-args --params-file /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/config/navigation/slam_toolbox_mapping.yaml"
 fi
 
 echo ""

@@ -57,8 +57,12 @@ class CaptureGalleryTests(unittest.TestCase):
             self.assertNotIn(str(root), items[1].manifest_name)
             manager = CaptureManager(settings, LogBuffer(20))
             self.assertEqual(manager.gallery_latest_frame_path("gate_2026-07-20"), second_frame.resolve())
+            self.assertEqual([frame.name for frame in manager.gallery_frames("gate_2026-07-20")], ["first.jpg", "second.jpg"])
+            self.assertEqual(manager.gallery_frame_path("gate_2026-07-20", "second.jpg"), second_frame.resolve())
             with self.assertRaises(ValueError):
                 manager.gallery_latest_frame_path("../outside")
+            with self.assertRaises(ValueError):
+                manager.gallery_frame_path("gate_2026-07-20", "../outside.jpg")
 
     def test_paginates_and_skips_empty_manifests(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
         help="CSV path; defaults to dataset root/manifest.csv",
     )
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between saved frames")
+    parser.add_argument("--warmup-seconds", type=float, default=2.0, help="seconds to read and discard after opening the stream")
     parser.add_argument("--max-frames", type=int, default=0, help="0 means run until Ctrl+C")
     parser.add_argument("--duration", type=float, default=0.0, help="maximum capture duration in seconds; 0 means no time limit")
     parser.add_argument("--jpeg-quality", type=int, default=95, help="JPEG quality 1-100")
@@ -77,6 +78,9 @@ def main() -> int:
     if args.interval <= 0:
         print("--interval must be greater than zero", file=sys.stderr)
         return 2
+    if args.warmup_seconds < 0:
+        print("--warmup-seconds must be zero or greater", file=sys.stderr)
+        return 2
     if args.duration < 0:
         print("--duration must be zero or greater", file=sys.stderr)
         return 2
@@ -96,6 +100,16 @@ def main() -> int:
     if not capture.isOpened():
         print(f"Unable to open video source: {args.source}", file=sys.stderr)
         return 1
+
+    if args.warmup_seconds > 0:
+        warmup_deadline = time.monotonic() + args.warmup_seconds
+        discarded = 0
+        while time.monotonic() < warmup_deadline:
+            ok, _ = capture.read()
+            discarded += 1
+            if not ok:
+                time.sleep(0.05)
+        print(f"stream warm-up complete: discarded {discarded} frame(s)")
 
     saved = 0
     next_save_at = 0.0

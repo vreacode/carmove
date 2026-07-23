@@ -22,6 +22,7 @@ MAP_DIR="/home/nvidia/Desktop/wheeltec_ros2/maps"
 MAP_NAME="${1:-my_map}"
 MAP_FILE="${MAP_DIR}/${MAP_NAME}.yaml"
 PARAMS_FILE="/home/nvidia/Desktop/wheeltec_ros2/src/wheeltec_robot_nav2/param/wheeltec_params/param_top_akm_dl.yaml"
+COLLISION_MONITOR_CONFIG="/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/config/navigation/collision_monitor.yaml"
 
 if [[ ! -f "$MAP_FILE" ]]; then
   echo "Map not found: ${MAP_FILE}"
@@ -81,6 +82,12 @@ run_cmd "pcl2scan" \
      -p min_height:=-0.15 -p max_height:=0.20 \
      -p range_min:=0.05 -p range_max:=30.0 \
      -p scan_time:=0.1"
+
+run_cmd "collision_monitor" \
+  "source /opt/ros/humble/setup.bash && \
+   ros2 launch nav2_collision_monitor collision_monitor_node.launch.py \
+     params_file:=${COLLISION_MONITOR_CONFIG} \
+     use_sim_time:=False"
 
 run_cmd "nav2" \
   "source /opt/ros/humble/setup.bash && \

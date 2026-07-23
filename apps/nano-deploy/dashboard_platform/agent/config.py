@@ -89,14 +89,17 @@ class AgentSettings(BaseSettings):
     preset_commands: str = "{}"
     enable_motion_control: bool = False
     motion_control_mode: str = "dry_run"
-    cmd_vel_topic: str = "/cmd_vel_nav"
+    # Manual commands go through the same final base-input topic as Nav2.
+    # Nav2 raw output remains /cmd_vel_nav; velocity_smoother -> collision_monitor
+    # produces /cmd_vel_safe.
+    cmd_vel_topic: str = "/cmd_vel_safe"
     max_linear_vel_safe: float = 0.05
     max_angular_vel_safe: float = 0.2
     control_command_timeout_ms: int = 300
     require_manual_arm: bool = True
     disable_manual_when_nav_running: bool = True
     base_start_script: str = "/home/nvidia/Desktop/wheeltec_ros2/start_base.sh"
-    base_cmd_vel_topic: str = "/cmd_vel_nav"
+    base_cmd_vel_topic: str = "/cmd_vel_safe"
     base_odom_topic: str = "/odom"
     base_node_name: str = "/wheeltec_robot"
     base_bringup_start_timeout_seconds: float = 10.0

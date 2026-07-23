@@ -86,7 +86,7 @@ bt_navigator_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: False
-    controller_frequency: 10.0                #运行控制器的频率
+    controller_frequency: 15.0                #运行控制器的频率
     # min_x_velocity_threshold: -0.35           #最小 x 速度阈值
     # min_y_velocity_threshold: 0.35             #最小 y 速度阈值
     # min_theta_velocity_threshold: 0.001       #最小速度阈值
@@ -107,11 +107,11 @@ controller_server:
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController" #RPP控制器
-      desired_linear_vel: 0.12
-      lookahead_dist: 1.6
-      min_lookahead_dist: 0.9
-      max_lookahead_dist: 2.0
-      lookahead_time: 2.0
+      desired_linear_vel: 0.10
+      lookahead_dist: 1.0
+      min_lookahead_dist: 0.6
+      max_lookahead_dist: 1.4
+      lookahead_time: 1.5
       use_velocity_scaled_lookahead_dist: true
       transform_tolerance: 0.1
       min_approach_linear_velocity: 0.04
@@ -250,7 +250,7 @@ planner_server: #规划器服务器参数
       max_iterations: 1000000             # 失败前搜索的最大迭代次数（以防无法到达），设置为 -1 以禁用
       max_on_approach_iterations: 1000    # 在公差范围内尝试达到目标的最大迭代次数，仅限 2D
       max_planning_time: 5.0              # 规划器进行规划、平滑和上采样的最大时间（以秒为单位）。
-      motion_model_for_search: "REEDS_SHEPP"    # 2D Moore, Von Neumann; Hybrid Dubin, Redds-Shepp; State Lattice set internally
+      motion_model_for_search: "DUBIN"          # top_akm_dl is forward-only Ackermann; do not plan reverse arcs
       cost_travel_multiplier: 1.0         #应用于搜索以避开高成本区域的成本乘数。
       # For 2D: Cost multiplier to apply to search to steer away from high cost areas. Larger values will place in the center of aisles more exactly (if non-`FREE` cost potential field exists) but take slightly longer to compute. To optimize for speed, a value of 1.0 is reasonable. A reasonable tradeoff value is 2.0. A value of 0.0 effective disables steering away from obstacles and acts like a naive binary search A*.
       angle_quantization_bins: 72         #用于 SE2 搜索的角度箱数量。这可以是任何偶数，但好的基线是 64 或 72（以 5 度为增量）

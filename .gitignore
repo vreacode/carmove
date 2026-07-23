@@ -59,6 +59,7 @@ logs/
 .vscode/
 .codex/
 **/.gradle/
+**/local.properties
 
 # Local source notes may contain credentials or private network details.
 /说明文档/

@@ -46,6 +46,15 @@ class ControlRequest(BaseModel):
     speed: Literal["low", "medium", "high"] = "medium"
 
 
+class CruiseStartRequest(BaseModel):
+    speed: Literal["low", "medium", "high"] = "medium"
+    auto_arm: bool = False
+
+
+class CruiseSteeringRequest(BaseModel):
+    direction: Literal["center", "left", "right"] = "center"
+
+
 class GimbalPulseRequest(BaseModel):
     yaw_speed: int = Field(default=0, ge=-100, le=100)
     pitch_speed: int = Field(default=0, ge=-100, le=100)
@@ -67,6 +76,12 @@ class MotionModeRequest(BaseModel):
 class PresetRequest(BaseModel):
     name: str
     variables: dict[str, str] = Field(default_factory=dict)
+
+
+class NavigationPointRequest(BaseModel):
+    x: float
+    y: float
+    yaw: float = 0.0
 
 
 class WebRTCOffer(BaseModel):
@@ -125,6 +140,12 @@ class CaptureGalleryItem(BaseModel):
     latest_frame_name: str | None = None
 
 
+class CaptureFrameItem(BaseModel):
+    name: str
+    captured_at: str | None = None
+    stream_mode: Literal["visible_raw", "ir_raw", "unknown"] = "unknown"
+
+
 class BatteryStatus(BaseModel):
     available: bool = False
     voltage: float | None = None
@@ -171,6 +192,9 @@ class MotionState(BaseModel):
     timeout_ms: int = 300
     max_linear_vel_safe: float = 0.05
     max_angular_vel_safe: float = 0.2
+    cruise_active: bool = False
+    cruise_speed: Literal["low", "medium", "high"] | None = None
+    cruise_steering: Literal["center", "left", "right"] = "center"
     last_command: MotionLastCommand | None = None
     last_error: str | None = None
 

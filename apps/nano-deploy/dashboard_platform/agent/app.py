@@ -16,12 +16,13 @@ from .config import AgentSettings
 from .battery import BatteryManager
 from camera.siyi_zt6 import SiyiZt6Client
 from .logs import LogBuffer
+from .navigation import NavigationManager
 from .motion import MotionControlManager
 from .pose import RobotPoseManager
 from .capture import CaptureManager
 from .runtime import BaseBringupManager, CommandRunner, DevScreenRecordingManager, MapManager, MediaManager, ModelProcessManager, StatusCollector
 from .sensors import SensorBridgeManager
-from .schemas import CaptureStartRequest, ControlRequest, GimbalPulseRequest, LoginlessAck, MediaRecordingStartRequest, MediaSnapshotRequest, ModelStartRequest, MotionArmRequest, MotionModeRequest, MotionOverrideRequest, PresetRequest, WebRTCOffer
+from .schemas import CaptureStartRequest, ControlRequest, CruiseStartRequest, CruiseSteeringRequest, GimbalPulseRequest, LoginlessAck, MediaRecordingStartRequest, MediaSnapshotRequest, ModelStartRequest, MotionArmRequest, MotionModeRequest, MotionOverrideRequest, NavigationPointRequest, PresetRequest, WebRTCOffer
 from .webrtc import WebRTCManager
 
 settings = AgentSettings()
@@ -33,6 +34,7 @@ motion_manager = MotionControlManager(settings, log_buffer)
 battery_manager = BatteryManager(settings, log_buffer)
 base_manager = BaseBringupManager(settings, log_buffer, motion_manager, battery_manager)
 command_runner = CommandRunner(settings, log_buffer, model_manager)
+navigation_manager = NavigationManager(settings, log_buffer)
 map_manager = MapManager(settings)
 media_manager = MediaManager(settings, log_buffer)
 capture_manager = CaptureManager(settings, log_buffer)
@@ -60,6 +62,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await battery_manager.start()
     yield
     await battery_manager.stop()
+    await navigation_manager.stop()
     await capture_manager.stop()
     await sensor_manager.stop()
     await pose_manager.stop()
@@ -245,7 +248,49 @@ async def control_send(request: ControlRequest) -> LoginlessAck:
         await motion_manager.send_control(request.command, request.speed, navigation_running=navigation_running)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = f"control send failed: {type(exc).__name__}: {exc}"
+        motion_manager.last_error = detail
+        log_buffer.add("control", "error", detail)
+        raise HTTPException(status_code=500, detail=detail) from exc
     return LoginlessAck(status="acked", detail=f"{request.command}:{request.speed}")
+
+
+@app.post("/control/cruise/start", dependencies=[Depends(verify_token)])
+async def control_cruise_start(request: CruiseStartRequest) -> dict:
+    try:
+        navigation_running = status_collector.collect().navigation_running
+        state = await motion_manager.start_cruise(request.speed, navigation_running=navigation_running, auto_arm=request.auto_arm)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.model_dump()
+
+
+@app.post("/control/cruise/steer", dependencies=[Depends(verify_token)])
+async def control_cruise_steer(request: CruiseSteeringRequest) -> dict:
+    try:
+        navigation_running = status_collector.collect().navigation_running
+        state = await motion_manager.set_cruise_steering(request.direction, navigation_running=navigation_running)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.model_dump()
+
+
+@app.post("/control/cruise/heartbeat", dependencies=[Depends(verify_token)])
+async def control_cruise_heartbeat() -> dict:
+    try:
+        navigation_running = status_collector.collect().navigation_running
+        state = await motion_manager.cruise_heartbeat(navigation_running=navigation_running)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.model_dump()
+
+
+@app.post("/control/cruise/stop", dependencies=[Depends(verify_token)])
+async def control_cruise_stop() -> dict:
+    navigation_running = status_collector.collect().navigation_running
+    state = await motion_manager.stop_cruise(navigation_running=navigation_running)
+    return state.model_dump()
 
 
 @app.get("/control/state", dependencies=[Depends(verify_token)])
@@ -284,6 +329,11 @@ async def control_mode(request: MotionModeRequest) -> dict:
         state = await motion_manager.set_mode(request.mode, base_ready=base_ready)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = f"motion mode failed: {type(exc).__name__}: {exc}"
+        motion_manager.last_error = detail
+        log_buffer.add("control", "error", detail)
+        raise HTTPException(status_code=500, detail=detail) from exc
     return state.model_dump()
 
 
@@ -314,6 +364,8 @@ async def run_preset(request: PresetRequest) -> LoginlessAck:
         "map_name": request.variables.get("map_name", settings.default_map_name),
     }
     try:
+        if request.name in {"start_mapping", "start_navigation"}:
+            await motion_manager.stop_cruise_if_active(navigation_running=False)
         if request.name == "start_navigation":
             try:
                 await command_runner.run_command(
@@ -332,6 +384,38 @@ async def run_preset(request: PresetRequest) -> LoginlessAck:
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return LoginlessAck(status=result["status"], detail=request.name)
+
+
+@app.get("/navigation/status", dependencies=[Depends(verify_token)])
+async def navigation_status() -> dict:
+    payload = navigation_manager.snapshot()
+    payload["navigation_running"] = status_collector.collect().navigation_running
+    return payload
+
+
+@app.post("/navigation/initial-pose", dependencies=[Depends(verify_token)])
+async def navigation_initial_pose(request: NavigationPointRequest) -> dict:
+    if not status_collector.collect().navigation_running:
+        raise HTTPException(status_code=409, detail="navigation is not running")
+    try:
+        return await navigation_manager.publish_initial_pose(request.x, request.y, request.yaw)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/navigation/goal", dependencies=[Depends(verify_token)])
+async def navigation_goal(request: NavigationPointRequest) -> dict:
+    if not status_collector.collect().navigation_running:
+        raise HTTPException(status_code=409, detail="navigation is not running")
+    try:
+        return await navigation_manager.send_goal(request.x, request.y, request.yaw)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/navigation/goal/cancel", dependencies=[Depends(verify_token)])
+async def navigation_goal_cancel() -> dict:
+    return await navigation_manager.cancel_goal()
 
 
 @app.get("/maps", dependencies=[Depends(verify_token)])
@@ -388,6 +472,27 @@ async def capture_gallery_latest(group: str) -> FileResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if path is None:
         raise HTTPException(status_code=404, detail="capture group or frame not found")
+    return FileResponse(path, media_type="image/jpeg", filename=path.name)
+
+
+@app.get("/capture/gallery/{group}/frames", dependencies=[Depends(verify_token)])
+async def capture_gallery_frames(group: str) -> list[dict]:
+    try:
+        return [frame.model_dump() for frame in capture_manager.gallery_frames(group)]
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/capture/gallery/{group}/frames/{frame_name}", dependencies=[Depends(verify_token)])
+async def capture_gallery_frame(group: str, frame_name: str) -> FileResponse:
+    try:
+        path = capture_manager.gallery_frame_path(group, frame_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if path is None:
+        raise HTTPException(status_code=404, detail="capture frame not found")
     return FileResponse(path, media_type="image/jpeg", filename=path.name)
 
 

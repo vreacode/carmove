@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import {
   ArrowsPointingOutIcon,
   ArrowPathIcon,
@@ -21,9 +21,23 @@ import { Panel } from "./components/Panel";
 import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
 import { VideoStream } from "./components/VideoStream";
 import { API_BASE, apiFetch, classNames, clearToken, formatNumber, loadToken, saveToken, wsUrl } from "./lib";
-import type { ConnectionState, LogItem, MapEntry, MapMetadata, MediaItem, MediaStatus, SiyiCameraStatus, StreamStats, SystemStatus } from "./types";
+import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaItem, MediaStatus, NavigationState, SiyiCameraStatus, StreamStats, SystemStatus } from "./types";
 
 type LoginResponse = { token: string; username: string };
+
+const workspaceMeta: Record<SidebarTab, { eyebrow: string; title: string; description: string }> = {
+  live: { eyebrow: "LIVE OPERATIONS", title: "实时监控", description: "查看双光视频、模型状态与车辆即时操控。" },
+  navigation: { eyebrow: "MAP & NAVIGATION", title: "建图导航", description: "管理地图、建图流程与自主导航任务。" },
+  perception: { eyebrow: "MEDIA & INTELLIGENCE", title: "媒体与感知", description: "管理录像、拍照、检测事件与系统日志。" },
+  diagnostics: { eyebrow: "SYSTEM HEALTH", title: "系统诊断", description: "核对底盘链路、设备资源和控制模式。" },
+};
+
+const workspaceTabs: SidebarTab[] = ["live", "navigation", "perception", "diagnostics"];
+
+function tabFromHash(hash: string): SidebarTab {
+  const candidate = hash.replace(/^#/, "") as SidebarTab;
+  return workspaceTabs.includes(candidate) ? candidate : "live";
+}
 
 const speedLevels = ["low", "medium", "high"] as const;
 const logFilters = ["all", "system", "model", "control"] as const;
@@ -41,7 +55,7 @@ function describeError(error: unknown) {
   if (raw.includes("invalid token") || raw.includes("missing bearer token")) return "鉴权失败：请重新登录。";
   if (raw.includes("manual control is locked")) return "手动控制已锁定：请先解锁控制。";
   if (raw.includes("navigation is running")) return "导航正在运行：如需人工接管，请先启用人工接管。";
-  if (raw.includes("base is not ready")) return "底盘未就绪：请先启动底盘，并确认 wheeltec_robot、/cmd_vel_nav、/odom 都在线。";
+  if (raw.includes("base is not ready")) return "底盘未就绪：请先启动底盘，并确认 wheeltec_robot、/cmd_vel_safe、/odom 都在线。";
   if (raw.includes("annotated stream is not ready")) return "检测结果视频未就绪：请先启动模型。";
   if (raw.includes("recording is already running")) return "录像已经在进行中：请先停止当前录像。";
   if (raw.includes("recording is disabled")) return "录像功能当前未启用。";
@@ -55,6 +69,8 @@ function describeError(error: unknown) {
   if (raw.includes("/odom not ready")) return "启动导航失败：里程计未就绪，请先确认底盘状态。";
   if (raw.includes("/c16/lslidar_point_cloud not ready")) return "启动导航失败：雷达点云未就绪，请检查雷达驱动。";
   if (raw.includes("/map is not ready")) return "保存地图失败：当前没有可用的 /map，请先启动建图。";
+  if (raw.includes("navigation is not running")) return "导航尚未运行：请先启动导航，再发布初始位姿或目标点。";
+  if (raw.includes("a navigation goal is already active")) return "已有导航目标执行中：请先取消当前目标。";
   if (raw.includes("timed out")) return "操作超时：请稍后重试，并检查后端日志。";
   if (raw.includes("stream offer failed")) return "视频协商失败：请检查 Agent、RTSP 和网络状态。";
   return raw;
@@ -62,7 +78,7 @@ function describeError(error: unknown) {
 
 function App() {
   const [token, setToken] = useState(loadToken());
-  const [activeTab, setActiveTab] = useState<SidebarTab>("live");
+  const [activeTab, setActiveTab] = useState<SidebarTab>(() => tabFromHash(window.location.hash));
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
   const [gimbalPending, setGimbalPending] = useState(false);
@@ -83,6 +99,13 @@ function App() {
   const [mapImageUrl, setMapImageUrl] = useState("");
   const [mapNameInput, setMapNameInput] = useState("");
   const [mapLoading, setMapLoading] = useState(false);
+  const [navigationState, setNavigationState] = useState<NavigationState | null>(null);
+  const [mapPointMode, setMapPointMode] = useState<"none" | "initial" | "goal">("none");
+  const [initialPoint, setInitialPoint] = useState<MapPoint | null>(null);
+  const [goalPoint, setGoalPoint] = useState<MapPoint | null>(null);
+  const [initialYawInput, setInitialYawInput] = useState("0");
+  const [goalYawInput, setGoalYawInput] = useState("0");
+  const [navigationPending, setNavigationPending] = useState<"" | "initial" | "goal" | "cancel">("");
   const [mediaStatus, setMediaStatus] = useState<MediaStatus | null>(null);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [mediaPending, setMediaPending] = useState<"" | "record-start" | "record-stop" | "snapshot">("");
@@ -94,18 +117,37 @@ function App() {
   const [modelPending, setModelPending] = useState<"" | "start" | "restart" | "stop">("");
   const [presetPending, setPresetPending] = useState("");
   const [controlPending, setControlPending] = useState(false);
+  const [cruisePending, setCruisePending] = useState<"" | "start" | "stop" | "steer">("");
   const [armPending, setArmPending] = useState(false);
   const [overridePending, setOverridePending] = useState(false);
   const [basePending, setBasePending] = useState<"" | "start" | "stop">("");
   const [modePending, setModePending] = useState<"" | "dry_run" | "real">("");
   const [refreshingMaps, setRefreshingMaps] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
+  const cruiseSteeringRequestRef = useRef<Promise<void> | null>(null);
+  const cruiseSteeringDesiredRef = useRef<"center" | "left" | "right">("center");
 
   function selectTab(tab: SidebarTab) {
     setActiveTab(tab);
-    const target = document.getElementById(`section-${tab}`);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (window.location.hash !== `#${tab}`) {
+      window.history.pushState({ workspace: tab }, "", `#${tab}`);
+    }
   }
+
+  const activeWorkspace = workspaceMeta[activeTab];
+
+  useEffect(() => {
+    const syncWorkspaceFromUrl = () => setActiveTab(tabFromHash(window.location.hash));
+    window.addEventListener("hashchange", syncWorkspaceFromUrl);
+    window.addEventListener("popstate", syncWorkspaceFromUrl);
+    if (window.location.hash !== `#${activeTab}`) {
+      window.history.replaceState({ workspace: activeTab }, "", `#${activeTab}`);
+    }
+    return () => {
+      window.removeEventListener("hashchange", syncWorkspaceFromUrl);
+      window.removeEventListener("popstate", syncWorkspaceFromUrl);
+    };
+  }, [activeTab]);
 
   const filteredLogs = useMemo(() => {
     if (logFilter === "all") return logs;
@@ -115,6 +157,8 @@ function App() {
   const manualControlBlocked =
     !!status?.motion_state &&
     ((status.motion_state.require_manual_arm && !status.motion_state.armed) || status.motion_state.nav_lockout);
+  const cruiseActive = status?.motion_state?.cruise_active ?? false;
+  const cruiseSteering = status?.motion_state?.cruise_steering ?? "center";
   const baseReady =
     !!status?.base_status?.wheeltec_robot_online &&
     !!status?.base_status?.cmd_vel_subscriber_online &&
@@ -200,6 +244,31 @@ function App() {
   }, [token]);
 
   useEffect(() => {
+    if (!token || !cruiseActive) return;
+    let cancelled = false;
+    const heartbeat = () => {
+      void apiFetch<SystemStatus["motion_state"]>("/api/control/cruise/heartbeat", token, { method: "POST" })
+        .then((payload) => {
+          if (!cancelled && payload) {
+            setStatus((prev) => (prev ? { ...prev, motion_state: payload } : prev));
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setError(describeError(err));
+            setStatus((prev) => (prev && prev.motion_state ? { ...prev, motion_state: { ...prev.motion_state, cruise_active: false, cruise_speed: null, cruise_steering: "center" } } : prev));
+          }
+        });
+    };
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 200);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [token, cruiseActive]);
+
+  useEffect(() => {
     if (!token) return;
     void apiFetch<{ items: MapEntry[] }>("/api/maps", token)
       .then((payload) => {
@@ -233,6 +302,26 @@ function App() {
       cancelled = true;
     };
   }, [token, selectedMapName]);
+
+  useEffect(() => {
+    if (!token || activeTab !== "navigation") return;
+    let cancelled = false;
+    const refreshNavigationState = () => {
+      void apiFetch<NavigationState>("/api/navigation/status", token)
+        .then((payload) => {
+          if (!cancelled) setNavigationState(payload);
+        })
+        .catch(() => {
+          if (!cancelled) setNavigationState(null);
+        });
+    };
+    refreshNavigationState();
+    const timer = window.setInterval(refreshNavigationState, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [token, activeTab]);
 
 
 
@@ -346,6 +435,66 @@ function App() {
       setError(describeError(err));
     } finally {
       setControlPending(false);
+    }
+  }
+
+  async function startCruise() {
+    try {
+      cruiseSteeringDesiredRef.current = "center";
+      setCruisePending("start");
+      setError("");
+      const payload = await apiFetch<SystemStatus["motion_state"]>("/api/control/cruise/start", token, {
+        method: "POST",
+        body: JSON.stringify({ speed }),
+      });
+      setStatus((prev) => (prev && payload ? { ...prev, motion_state: payload } : prev));
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setCruisePending("");
+    }
+  }
+
+  async function stopCruise() {
+    try {
+      cruiseSteeringDesiredRef.current = "center";
+      setCruisePending("stop");
+      setError("");
+      const payload = await apiFetch<SystemStatus["motion_state"]>("/api/control/cruise/stop", token, { method: "POST" });
+      setStatus((prev) => (prev && payload ? { ...prev, motion_state: payload } : prev));
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setCruisePending("");
+    }
+  }
+
+  async function steerCruise(direction: "center" | "left" | "right") {
+    if (!cruiseActive) return;
+    cruiseSteeringDesiredRef.current = direction;
+    if (cruiseSteeringRequestRef.current) return;
+    const request = (async () => {
+      while (cruiseActive) {
+        const nextDirection = cruiseSteeringDesiredRef.current;
+        try {
+          setError("");
+          const payload = await apiFetch<SystemStatus["motion_state"]>("/api/control/cruise/steer", token, {
+            method: "POST",
+            body: JSON.stringify({ direction: nextDirection }),
+          });
+          setStatus((prev) => (prev && payload ? { ...prev, motion_state: payload } : prev));
+        } catch (err) {
+          setError(describeError(err));
+          break;
+        }
+        if (cruiseSteeringDesiredRef.current === nextDirection) break;
+      }
+    })();
+    cruiseSteeringRequestRef.current = request;
+    try {
+      await request;
+    } finally {
+      if (cruiseSteeringRequestRef.current === request) cruiseSteeringRequestRef.current = null;
     }
   }
 
@@ -593,6 +742,80 @@ function App() {
     });
   }
 
+  function mapPointFromEvent(event: MouseEvent<HTMLDivElement>): MapPoint | null {
+    if (!mapMetadata?.width || !mapMetadata.height || !mapMetadata.resolution || mapMetadata.origin.length < 2) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pixelX = Math.max(0, Math.min(mapMetadata.width, ((event.clientX - rect.left) / rect.width) * mapMetadata.width));
+    const pixelY = Math.max(0, Math.min(mapMetadata.height, ((event.clientY - rect.top) / rect.height) * mapMetadata.height));
+    const originX = mapMetadata.origin[0];
+    const originY = mapMetadata.origin[1];
+    const yaw = Number(mapPointMode === "initial" ? initialYawInput : goalYawInput);
+    return {
+      x: originX + pixelX * mapMetadata.resolution,
+      y: originY + (mapMetadata.height - pixelY) * mapMetadata.resolution,
+      yaw: Number.isFinite(yaw) ? (yaw * Math.PI) / 180 : 0,
+      frame_id: "map",
+    };
+  }
+
+  function mapPointPosition(point: MapPoint | null) {
+    if (!point || !mapMetadata?.width || !mapMetadata.height || !mapMetadata.resolution || mapMetadata.origin.length < 2) return null;
+    const pixelX = (point.x - mapMetadata.origin[0]) / mapMetadata.resolution;
+    const pixelY = mapMetadata.height - (point.y - mapMetadata.origin[1]) / mapMetadata.resolution;
+    return {
+      left: `${Math.max(0, Math.min(100, (pixelX / mapMetadata.width) * 100))}%`,
+      top: `${Math.max(0, Math.min(100, (pixelY / mapMetadata.height) * 100))}%`,
+    };
+  }
+
+  function handleMapClick(event: MouseEvent<HTMLDivElement>) {
+    if (mapPointMode === "none") return;
+    const point = mapPointFromEvent(event);
+    if (!point) return;
+    if (mapPointMode === "initial") setInitialPoint(point);
+    if (mapPointMode === "goal") setGoalPoint(point);
+  }
+
+  async function publishInitialPose() {
+    if (!initialPoint) return;
+    try {
+      setNavigationPending("initial");
+      setError("");
+      await apiFetch("/api/navigation/initial-pose", token, { method: "POST", body: JSON.stringify(initialPoint) });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setNavigationPending("");
+    }
+  }
+
+  async function sendNavigationGoal() {
+    if (!goalPoint) return;
+    try {
+      setNavigationPending("goal");
+      setError("");
+      const payload = await apiFetch<NavigationState>("/api/navigation/goal", token, { method: "POST", body: JSON.stringify(goalPoint) });
+      setNavigationState(payload);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setNavigationPending("");
+    }
+  }
+
+  async function cancelNavigationGoal() {
+    try {
+      setNavigationPending("cancel");
+      setError("");
+      const payload = await apiFetch<NavigationState>("/api/navigation/goal/cancel", token, { method: "POST" });
+      setNavigationState(payload);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setNavigationPending("");
+    }
+  }
+
   function logout() {
     clearToken();
     setToken("");
@@ -639,15 +862,19 @@ function App() {
 
   return (
     <div className="flex min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(125,211,252,.24),transparent_30%),linear-gradient(135deg,#edf5ff_0%,#f8fbff_48%,#e9f2fb_100%)] text-primary">
-      <SidebarMenu activeTab={activeTab} onChange={selectTab} />
+      <SidebarMenu activeTab={activeTab} onChange={selectTab} status={status} />
       <main className="min-w-0 flex-1 px-5 py-5 lg:px-8">
       <header className="mb-6 flex flex-col gap-4 rounded-lg border border-base/70 bg-panel p-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold tracking-tight text-primary">Vehicle Intelligence Console</h1>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-accent-600">{activeWorkspace.eyebrow}</span>
             <span className="rounded bg-page px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-muted">NANO</span>
           </div>
-          <p className="mt-1 text-[13px] text-muted">提供实时视频、导航流程、模型管理、媒体记录与车辆控制能力。</p>
+          <div className="mt-2 flex items-end gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-primary">{activeWorkspace.title}</h1>
+            <span className="hidden pb-0.5 text-xs text-muted lg:inline">Vehicle Intelligence Console</span>
+          </div>
+          <p className="mt-1 text-[13px] text-muted">{activeWorkspace.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone={status?.agent_online ? "good" : "danger"}>设备 {status?.agent_online ? "在线" : "离线"}</StatusPill>
@@ -663,7 +890,7 @@ function App() {
       </header>
 
       <div className="space-y-5">
-        <div id="section-live" className="scroll-mt-6 grid gap-5 xl:grid-cols-12">
+        {activeTab === "live" ? <div id="section-live" className="grid gap-5 xl:grid-cols-12">
           <div className="h-full xl:col-span-8">
             <Panel
               title="实时视频 (双光融合)"
@@ -815,9 +1042,11 @@ function App() {
                   <button
                     key={item}
                     onClick={() => setSpeed(item)}
+                    disabled={cruiseActive}
                     className={classNames(
                       "rounded-full px-3 py-1.5 text-sm capitalize transition",
                       speed === item ? "bg-accent-300 text-primary" : "border border-base bg-panel text-tertiary",
+                      cruiseActive && "cursor-not-allowed opacity-50",
                     )}
                   >
                     {item}
@@ -847,15 +1076,42 @@ function App() {
                 {controlHint}
               </div>
               <div className="rounded-xl border border-base bg-card/50 p-5">
+                <div className="mb-5 rounded-2xl border border-accent-200 bg-gradient-to-br from-accent-50 to-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-primary">匀速前进</p>
+                      <p className="mt-1 text-xs leading-5 text-tertiary">底盘持续保持当前速度档位前进，只需按住左右键修正方向。</p>
+                    </div>
+                    <StatusPill tone={cruiseActive ? "good" : "neutral"}>{cruiseActive ? (cruiseSteering === "center" ? "直行中" : cruiseSteering === "left" ? "左修正" : "右修正") : "待启动"}</StatusPill>
+                  </div>
+                  <button
+                    onClick={() => void (cruiseActive ? stopCruise() : startCruise())}
+                    disabled={cruisePending !== "" || !status?.motion_state || (!cruiseActive && manualControlBlocked)}
+                    className={classNames(
+                      "mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition",
+                      cruiseActive ? "bg-panel text-danger ring-1 ring-red-200 hover:bg-red-50" : "bg-accent-300 text-primary hover:bg-accent-400",
+                      (cruisePending !== "" || !status?.motion_state || (!cruiseActive && manualControlBlocked)) && "cursor-not-allowed opacity-50",
+                    )}
+                  >
+                    {cruisePending === "start" ? "正在启动..." : cruisePending === "stop" ? "正在停车..." : cruiseActive ? "停止匀速前进" : "开始匀速前进"}
+                  </button>
+                  {cruiseActive && (
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      <CruiseDirectionButton icon={<ChevronLeftIcon className="h-6 w-6" />} title="按住左修正" onPress={() => void steerCruise("left")} onRelease={() => void steerCruise("center")} disabled={cruisePending === "start" || cruisePending === "stop"} />
+                      <CruiseDirectionButton icon={<ChevronUpIcon className="h-6 w-6" />} title="直行" onPress={() => void steerCruise("center")} onRelease={() => void steerCruise("center")} disabled={cruisePending === "start" || cruisePending === "stop"} active={cruiseSteering === "center"} />
+                      <CruiseDirectionButton icon={<ChevronRightIcon className="h-6 w-6" />} title="按住右修正" onPress={() => void steerCruise("right")} onRelease={() => void steerCruise("center")} disabled={cruisePending === "start" || cruisePending === "stop"} />
+                    </div>
+                  )}
+                </div>
                 <div className="mx-auto w-fit grid grid-cols-3 gap-2">
                   <div />
-                  <ControlButton icon={<ChevronUpIcon className="h-7 w-7" />} disabled={controlPending || manualControlBlocked} onClick={() => void sendControl("forward")} title="前进" />
+                  <ControlButton icon={<ChevronUpIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("forward")} title="前进" />
                   <div />
-                  <ControlButton icon={<ChevronLeftIcon className="h-7 w-7" />} disabled={controlPending || manualControlBlocked} onClick={() => void sendControl("left")} title="左转" />
-                  <ControlButton icon={<StopIcon className="h-7 w-7" />} disabled={controlPending} onClick={() => void sendControl("stop")} title="停止" variant="danger" />
-                  <ControlButton icon={<ChevronRightIcon className="h-7 w-7" />} disabled={controlPending || manualControlBlocked} onClick={() => void sendControl("right")} title="右转" />
+                  <ControlButton icon={<ChevronLeftIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("left")} title="左转" />
+                  <ControlButton icon={<StopIcon className="h-7 w-7" />} disabled={controlPending || cruisePending !== ""} onClick={() => void (cruiseActive ? stopCruise() : sendControl("stop"))} title="停止" variant="danger" />
+                  <ControlButton icon={<ChevronRightIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("right")} title="右转" />
                   <div />
-                  <ControlButton icon={<ChevronDownIcon className="h-7 w-7" />} disabled={controlPending || manualControlBlocked} onClick={() => void sendControl("backward")} title="后退" />
+                  <ControlButton icon={<ChevronDownIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("backward")} title="后退" />
                   <div />
                 </div>
                 <button
@@ -881,9 +1137,9 @@ function App() {
               </div>
             </Panel>
           </div>
-        </div>
+        </div> : null}
 
-        <div id="section-navigation" className="scroll-mt-6 grid gap-5 xl:grid-cols-12">
+        {activeTab === "navigation" ? <div id="section-navigation" className="grid gap-5 xl:grid-cols-12">
           <div className="h-full xl:col-span-4">
             <Panel title="建图与导航" subtitle="管理建图、地图保存、导航与 RViz。" className="h-full min-h-[560px]">
               <div className="flex h-full flex-col">
@@ -922,6 +1178,33 @@ function App() {
                   <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "open_rviz" ? "打开中..." : "打开 RViz"} disabled={!!presetPending} onClick={() => void runPreset("open_rviz")} />
                   <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_mapping" ? "停止中..." : "停止建图"} disabled={!!presetPending} onClick={() => void runPreset("stop_mapping")} />
                   <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_navigation" ? "停止中..." : "停止导航"} disabled={!!presetPending} onClick={() => void runPreset("stop_navigation")} />
+                </div>
+                <div className="mt-5 rounded-xl border border-base bg-card/50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-disabled">目标点工作区</p>
+                      <p className="mt-1 text-sm text-muted">点击地图记录起点或目标点；只有点击“发布/发送”才会下发 ROS 命令。</p>
+                    </div>
+                    <span className="rounded-full border border-base bg-panel px-2 py-1 text-[11px] text-disabled">{navigationState?.goal_status || "idle"}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <button onClick={() => setMapPointMode(mapPointMode === "initial" ? "none" : "initial")} className={classNames("rounded-lg border px-2 py-2 text-xs", mapPointMode === "initial" ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel text-tertiary")}>设置起点</button>
+                    <button onClick={() => setMapPointMode(mapPointMode === "goal" ? "none" : "goal")} className={classNames("rounded-lg border px-2 py-2 text-xs", mapPointMode === "goal" ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel text-tertiary")}>设置目标</button>
+                    <button onClick={() => { setMapPointMode("none"); setInitialPoint(null); setGoalPoint(null); }} className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary">清除点位</button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <label className="text-xs text-muted">起点朝向°
+                      <input value={initialYawInput} onChange={(event) => setInitialYawInput(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border border-base bg-panel px-2 py-2 text-sm text-secondary" />
+                    </label>
+                    <label className="text-xs text-muted">目标朝向°
+                      <input value={goalYawInput} onChange={(event) => setGoalYawInput(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border border-base bg-panel px-2 py-2 text-sm text-secondary" />
+                    </label>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button disabled={!initialPoint || navigationPending !== ""} onClick={() => void publishInitialPose()} className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "initial" ? "发布中..." : "发布起点"}</button>
+                    <button disabled={!goalPoint || navigationPending !== "" || !navigationState?.navigation_running} onClick={() => void sendNavigationGoal()} className="rounded-lg bg-accent-500 px-2 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "goal" ? "发送中..." : "发送目标"}</button>
+                  </div>
+                  <button disabled={navigationPending !== "" || !navigationState?.goal} onClick={() => void cancelNavigationGoal()} className="mt-2 w-full rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "cancel" ? "取消中..." : "取消当前目标"}</button>
                 </div>
                 <div className="mt-auto pt-4">
                   {presetPending ? <p className="text-sm text-accent-600">正在执行：{presetPending}</p> : <div className="h-5" />}
@@ -975,19 +1258,30 @@ function App() {
                   />
                   <MetaCard label="地图尺寸" value={mapMetadata?.width && mapMetadata?.height ? `${mapMetadata.width} × ${mapMetadata.height}` : "--"} />
                 </div>
-                <div className="overflow-hidden rounded-xl border border-base bg-page/90">
+                <div
+                  onClick={handleMapClick}
+                  className={classNames("relative overflow-hidden rounded-xl border border-base bg-page/90", mapPointMode !== "none" && "cursor-crosshair")}
+                  style={{ aspectRatio: mapMetadata?.width && mapMetadata?.height ? `${mapMetadata.width} / ${mapMetadata.height}` : "16 / 10" }}
+                >
                   {mapLoading ? <div className="flex aspect-[16/10] items-center justify-center text-sm text-disabled">地图加载中...</div> : null}
-                  {!mapLoading && mapImageUrl ? <img alt={`map ${mapMetadata?.name ?? ""}`} src={mapImageUrl} className="max-h-[520px] w-full object-contain" /> : null}
+                  {!mapLoading && mapImageUrl ? <img alt={`map ${mapMetadata?.name ?? ""}`} src={mapImageUrl} className="absolute inset-0 h-full w-full object-fill" /> : null}
+                  {!mapLoading && mapImageUrl && initialPoint ? <div className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-sky-500 px-2 py-1 text-[10px] font-semibold text-white shadow" style={mapPointPosition(initialPoint) || undefined}>起点</div> : null}
+                  {!mapLoading && mapImageUrl && goalPoint ? <div className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent-500 px-2 py-1 text-[10px] font-semibold text-white shadow" style={mapPointPosition(goalPoint) || undefined}>目标</div> : null}
                   {!mapLoading && !mapImageUrl ? <div className="flex aspect-[16/10] items-center justify-center text-sm text-muted">请选择地图。</div> : null}
                 </div>
-                <p className="mt-3 text-sm text-muted">支持地图切换与结果查看，导航调试可结合 RViz 完成。</p>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
+                  <span>地图点击模式：{mapPointMode === "initial" ? "设置起点" : mapPointMode === "goal" ? "设置目标" : "未选择"}</span>
+                  {initialPoint ? <span className="text-sky-700">起点 {initialPoint.x.toFixed(2)}, {initialPoint.y.toFixed(2)}</span> : null}
+                  {goalPoint ? <span className="text-accent-700">目标 {goalPoint.x.toFixed(2)}, {goalPoint.y.toFixed(2)}</span> : null}
+                </div>
+                <p className="mt-2 text-sm text-muted">目标发送前请先启动导航并发布起始位姿；地图点击只做坐标换算，不会自动驱动车辆。</p>
               </div>
             </div>
           </Panel>
-        </div>
+        </div> : null}
 
 
-        <div id="section-diagnostics" className="scroll-mt-6">
+        {activeTab === "diagnostics" ? <div id="section-diagnostics">
         <Panel title="系统与底盘状态" subtitle="查看系统资源、底盘在线状态与控制模式。">
           <div className="grid gap-4 xl:grid-cols-4">
             <div className="rounded-xl border border-base bg-card/50 p-4">
@@ -1119,9 +1413,9 @@ function App() {
           </div>
           {status?.base_status?.last_error ? <p className="mt-3 text-sm text-amber-600">底盘提示：{status.base_status.last_error}</p> : null}
         </Panel>
-        </div>
+        </div> : null}
 
-        <div id="section-perception" className="scroll-mt-6 grid gap-5 xl:grid-cols-12">
+        {activeTab === "perception" ? <div id="section-perception" className="grid gap-5 xl:grid-cols-12">
           <Panel title="媒体与记录" subtitle="管理录像、拍照与 AI 检测历史记录。" className="h-full xl:col-span-5 flex flex-col">
             <div className="mb-4 grid grid-cols-2 gap-3">
               <StatCard label="录像状态" value={mediaStatus?.recording_running ? "recording" : "idle"} />
@@ -1276,7 +1570,7 @@ function App() {
               {error ? <p className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">失败提示：{error}</p> : null}
             </Panel>
           </div>
-        </div>
+        </div> : null}
 
       </div>
       </main>
@@ -1313,6 +1607,48 @@ function ControlButton({ icon, title, onClick, disabled = false, variant = "defa
           : variant === "danger"
             ? "border-red-200 bg-panel text-red-500 hover:border-red-400 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500/40"
             : "border-base bg-panel text-secondary hover:border-accent-300 hover:bg-accent-50 hover:text-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/40",
+      )}
+    >
+      {icon}
+    </button>
+  );
+}
+
+function CruiseDirectionButton({
+  icon,
+  title,
+  onPress,
+  onRelease,
+  disabled = false,
+  active = false,
+}: {
+  icon: ReactNode;
+  title: string;
+  onPress: () => void;
+  onRelease: () => void;
+  disabled?: boolean;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      style={{ touchAction: "none" }}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onPress();
+      }}
+      onPointerUp={(event) => {
+        event.preventDefault();
+        onRelease();
+      }}
+      onPointerCancel={onRelease}
+      className={classNames(
+        "flex h-14 items-center justify-center rounded-xl border text-secondary transition-all active:scale-95",
+        active ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel hover:border-accent-300 hover:bg-accent-50 hover:text-accent-600",
+        disabled && "cursor-not-allowed opacity-50",
       )}
     >
       {icon}

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .config import AgentSettings
 from .logs import LogBuffer
-from .schemas import CaptureGalleryItem, CaptureStartRequest, CaptureStatus
+from .schemas import CaptureFrameItem, CaptureGalleryItem, CaptureStartRequest, CaptureStatus
 
 
 class CaptureManager:
@@ -60,6 +60,10 @@ class CaptureManager:
         if "video1" in value or "visible" in value:
             return "visible_raw"
         return "unknown"
+
+    @staticmethod
+    def _is_transient_decoder_warning(line: str) -> bool:
+        return bool(re.search(r"(?:hevc|h264).*Could not find ref with POC|Could not find ref with POC", line, re.IGNORECASE))
 
     def list_gallery(self, page: int = 1, page_size: int = 20) -> list[CaptureGalleryItem]:
         """Read completed capture sessions without exposing absolute filesystem paths."""
@@ -140,6 +144,52 @@ class CaptureManager:
             return None
         return max(candidates, key=lambda item: item[0])[1]
 
+    def gallery_frames(self, group: str) -> list[CaptureFrameItem]:
+        """Return the readable frames in one manifest, in capture order."""
+        if not re.fullmatch(r"[0-9A-Za-z\u4e00-\u9fff_-]{1,160}", group):
+            raise ValueError("invalid capture group")
+        root = self.settings.capture_output_root.expanduser().resolve()
+        manifest_path = root / "manifests" / f"{group}.csv"
+        if not manifest_path.is_file():
+            return []
+        try:
+            with manifest_path.open("r", newline="", encoding="utf-8") as handle:
+                rows = [row for row in csv.DictReader(handle) if row.get("frame_path")]
+        except (OSError, UnicodeError, csv.Error) as exc:
+            raise RuntimeError(f"unable to read capture manifest: {manifest_path.name}") from exc
+
+        frames: list[CaptureFrameItem] = []
+        for row in rows:
+            frame_path = Path(row["frame_path"]).expanduser().resolve()
+            if root not in frame_path.parents or not frame_path.is_file():
+                continue
+            frames.append(
+                CaptureFrameItem(
+                    name=frame_path.name,
+                    captured_at=row.get("captured_at", "") or None,
+                    stream_mode=self._stream_mode(row.get("source", "")),
+                )
+            )
+        return frames
+
+    def gallery_frame_path(self, group: str, frame_name: str) -> Path | None:
+        if not re.fullmatch(r"[0-9A-Za-z\u4e00-\u9fff_.-]{1,200}", frame_name):
+            raise ValueError("invalid capture frame")
+        root = self.settings.capture_output_root.expanduser().resolve()
+        manifest_path = root / "manifests" / f"{group}.csv"
+        if not manifest_path.is_file():
+            return None
+        try:
+            with manifest_path.open("r", newline="", encoding="utf-8") as handle:
+                rows = [row for row in csv.DictReader(handle) if row.get("frame_path")]
+        except (OSError, UnicodeError, csv.Error) as exc:
+            raise RuntimeError(f"unable to read capture manifest: {manifest_path.name}") from exc
+        for row in rows:
+            frame_path = Path(row["frame_path"]).expanduser().resolve()
+            if frame_path.name == frame_name and root in frame_path.parents and frame_path.is_file():
+                return frame_path
+        return None
+
     async def _read_stdout(self, stream: asyncio.StreamReader | None) -> None:
         if stream is None:
             return
@@ -163,6 +213,10 @@ class CaptureManager:
         async for raw in stream:
             line = raw.decode("utf-8", errors="replace").strip()
             if line:
+                if self._is_transient_decoder_warning(line):
+                    self._status = self._status.model_copy(update={"last_line": line})
+                    self.log_buffer.add("capture", "warning", line)
+                    continue
                 self._status = self._status.model_copy(update={"last_error": line, "last_line": line})
                 self.log_buffer.add("capture", "error", line)
 
@@ -189,8 +243,8 @@ class CaptureManager:
                 raise RuntimeError(f"{request.stream_mode} source is not configured")
 
             scene = self.slug_scene(request.scene)
-            date_tag = datetime.now().astimezone().date().isoformat()
-            group = f"{scene}_{date_tag}"
+            session_tag = datetime.now().astimezone().strftime("%Y-%m-%d_%H%M%S_%f")[:-3]
+            group = f"{scene}_{session_tag}"
             output_dir = (self.settings.capture_output_root / "images" / group).resolve()
             manifest_path = (self.settings.capture_output_root / "manifests" / f"{group}.csv").resolve()
             root = self.settings.capture_output_root.expanduser().resolve()
@@ -210,6 +264,8 @@ class CaptureManager:
                 str(manifest_path),
                 "--interval",
                 str(request.interval_seconds),
+                "--warmup-seconds",
+                "2.0",
                 "--scene",
                 scene,
                 "--note",

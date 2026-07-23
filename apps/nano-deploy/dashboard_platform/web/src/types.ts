@@ -41,6 +41,9 @@ export type MotionState = {
   timeout_ms: number;
   max_linear_vel_safe: number;
   max_angular_vel_safe: number;
+  cruise_active: boolean;
+  cruise_speed?: "low" | "medium" | "high" | null;
+  cruise_steering: "center" | "left" | "right";
   last_command?: MotionLastCommand | null;
   last_error?: string | null;
 };
@@ -195,6 +198,22 @@ export type MapMetadata = {
   height?: number | null;
 };
 
+export type MapPoint = {
+  x: number;
+  y: number;
+  yaw: number;
+  frame_id: string;
+};
+
+export type NavigationState = {
+  navigation_running: boolean;
+  goal_status: "idle" | "sent" | "completed" | "succeeded" | "failed" | "cancelled";
+  goal?: MapPoint | null;
+  last_result?: string | null;
+  last_error?: string | null;
+  updated_at?: string | null;
+};
+
 export type MediaStatus = {
   enabled: boolean;
   gallery_enabled: boolean;
@@ -246,4 +265,10 @@ export type CaptureGalleryItem = {
   note?: string;
   manifest_name: string;
   latest_frame_name?: string | null;
+};
+
+export type CaptureFrameItem = {
+  name: string;
+  captured_at?: string | null;
+  stream_mode: "visible_raw" | "ir_raw" | "unknown";
 };

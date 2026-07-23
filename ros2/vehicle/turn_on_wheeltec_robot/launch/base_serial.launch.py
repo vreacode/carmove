@@ -19,13 +19,16 @@ def generate_launch_description():
         executable='wheeltec_robot_node',
         name='wheeltec_robot', # Added name for clarity, assuming it was missing in the snippet
         output='screen',
-        remappings=[('/cmd_vel', '/cmd_vel_nav')],
+        # The base must consume the post-processed command. Nav2 publishes
+        # raw commands to /cmd_vel_nav, velocity_smoother publishes /cmd_vel,
+        # and collision_monitor gates the final /cmd_vel_safe stream.
+        remappings=[('/cmd_vel', '/cmd_vel_safe')],
         parameters=[{'usart_port_name': '/dev/ttyCH343USB0', # 大车串口；驱动实际读取此参数
                     'serial_baud_rate': 115200,
                     'robot_frame_id': 'base_footprint',
                     'odom_frame_id': 'odom_combined',
-                    'cmd_vel': 'cmd_vel_nav',
-                    'akm_cmd_vel': 'cmd_vel_nav',
+                    'cmd_vel': 'cmd_vel_safe',
+                    'akm_cmd_vel': 'cmd_vel_safe',
                     'product_number': 4,
                     'odom_x_scale': 2.6982,
                     'odom_y_scale': 2.6982,
