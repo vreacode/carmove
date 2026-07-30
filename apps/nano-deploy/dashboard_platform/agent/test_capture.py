@@ -84,6 +84,40 @@ class CaptureGalleryTests(unittest.TestCase):
             self.assertEqual(len(manager.list_gallery(page=2, page_size=2)), 1)
             self.assertEqual(manager.list_gallery(page=3, page_size=2), [])
 
+    def test_deletes_only_selected_capture_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            selected_frame = root / "images" / "capture_20260729_191500" / "frame.jpg"
+            retained_frame = root / "images" / "capture_20260729_191600" / "frame.jpg"
+            for frame in (selected_frame, retained_frame):
+                frame.parent.mkdir(parents=True, exist_ok=True)
+                frame.write_bytes(b"fixture")
+            self.write_manifest(
+                root,
+                "capture_20260729_191500.csv",
+                [[str(selected_frame), "2026-07-29T19:15:00+08:00", "capture_20260729_191500", "rtsp://camera/video1", ""]],
+            )
+            self.write_manifest(
+                root,
+                "capture_20260729_191600.csv",
+                [[str(retained_frame), "2026-07-29T19:16:00+08:00", "capture_20260729_191600", "rtsp://camera/video1", ""]],
+            )
+            manager = CaptureManager(AgentSettings(_env_file=None, capture_output_root=root), LogBuffer(20))
+
+            result = manager.delete_gallery("capture_20260729_191500")
+
+            self.assertEqual(result["frames_deleted"], 1)
+            self.assertFalse(selected_frame.exists())
+            self.assertFalse((root / "manifests" / "capture_20260729_191500.csv").exists())
+            self.assertTrue(retained_frame.exists())
+            self.assertTrue((root / "manifests" / "capture_20260729_191600.csv").exists())
+
+    def test_delete_rejects_capture_group_path_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = CaptureManager(AgentSettings(_env_file=None, capture_output_root=Path(directory)), LogBuffer(20))
+            with self.assertRaises(ValueError):
+                manager.delete_gallery("../outside")
+
 
 if __name__ == "__main__":
     unittest.main()

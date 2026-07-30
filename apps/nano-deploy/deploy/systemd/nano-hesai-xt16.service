@@ -1,0 +1,17 @@
+[Unit]
+Description=Hesai PandarXT-16 LiDAR Driver
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
+EnvironmentFile=-/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/.env
+Environment=PYTHONNOUSERSITE=1
+ExecStart=/bin/bash -lc 'source /opt/ros/humble/setup.bash && source /home/nvidia/ros2_ws/install/setup.bash && exec /home/nvidia/ros2_ws/install/hesai_ros_driver/lib/hesai_ros_driver/hesai_ros_driver_node --ros-args -p config_path:=/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/config/lidar/hesai_xt16.yaml'
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+
+[Install]
+WantedBy=default.target

@@ -10,7 +10,8 @@ MAP_DIR="/home/nvidia/Desktop/wheeltec_ros2/maps"
 PARAMS_FILE="/home/nvidia/Desktop/wheeltec_ros2/src/wheeltec_robot_nav2/param/wheeltec_params/param_top_akm_dl.yaml"
 COLLISION_MONITOR_CONFIG="${ROOT_DIR}/config/navigation/collision_monitor.yaml"
 MAP_VALIDATOR="/home/nvidia/carmove/tools/validate_ros_map.py"
-LIDAR_SCRIPT="${ROOT_DIR}/scripts/ensure_lidar_c16.sh"
+LIDAR_SCRIPT="${ROOT_DIR}/scripts/ensure_lidar_hesai_xt16.sh"
+LIDAR_TOPIC="${LIDAR_POINT_TOPIC:-/lidar_points}"
 
 mkdir -p "${LOG_DIR}" "${PID_DIR}"
 
@@ -53,7 +54,7 @@ preflight() {
   "${LIDAR_SCRIPT}" start
   wait_for_ready "wheeltec_robot" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 node list | grep -q '^/wheeltec_robot$'" 12
   wait_for_ready "/odom" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /odom -v | grep -q 'Publisher count: 1'" 12
-  wait_for_ready "/c16/lslidar_point_cloud" "source /opt/ros/humble/setup.bash && source /home/nvidia/fastlio2_ws/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /c16/lslidar_point_cloud -v | grep -q 'Publisher count: 1'" 12
+  wait_for_ready "${LIDAR_TOPIC}" "source /opt/ros/humble/setup.bash && source /home/nvidia/ros2_ws/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info ${LIDAR_TOPIC} -v | grep -q 'Publisher count: [1-9]'" 25
 }
 
 cleanup() {
@@ -62,8 +63,13 @@ cleanup() {
       [[ -n "${pid:-}" ]] || continue
       # Each component is launched in its own session so the ros2 wrapper and
       # the actual executable are stopped together.
-      kill -TERM -- "-${pid}" 2>/dev/null || kill -TERM "${pid}" 2>/dev/null || true
-      sleep 0.5
+      kill -INT -- "-${pid}" 2>/dev/null || kill -INT "${pid}" 2>/dev/null || true
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        kill -0 -- "-${pid}" 2>/dev/null || break
+        sleep 0.2
+      done
+      kill -TERM -- "-${pid}" 2>/dev/null || true
+      sleep 0.3
       kill -KILL -- "-${pid}" 2>/dev/null || true
     done < "${PID_FILE}"
     rm -f "${PID_FILE}"
@@ -124,11 +130,12 @@ run_cmd "nav_pcl2scan" \
    source /home/nvidia/fastlio2_ws/install/setup.bash && \
    ros2 run pointcloud_to_laserscan pointcloud_to_laserscan_node \
      --ros-args \
-     --remap cloud_in:=/c16/lslidar_point_cloud \
+     --remap cloud_in:=${LIDAR_TOPIC} \
      --remap scan:=/scan \
      -p target_frame:=laser \
-     -p min_height:=-0.15 \
-     -p max_height:=0.20 \
+     -p angle_increment:=0.008726646259971648 \
+     -p min_height:=-0.05 \
+     -p max_height:=0.15 \
      -p range_min:=0.05 \
      -p range_max:=30.0 \
      -p scan_time:=0.1"
@@ -150,5 +157,10 @@ run_cmd "nav2_integrated" \
      slam:=False \
      use_sim_time:=False \
      autostart:=True"
+
+run_cmd "navigation_rviz" \
+  "export DISPLAY='${DISPLAY:-:0}' && \
+   export XAUTHORITY='${XAUTHORITY:-/home/nvidia/.Xauthority}' && \
+   bash ${ROOT_DIR}/scripts/open_rviz.sh nav"
 
 wait

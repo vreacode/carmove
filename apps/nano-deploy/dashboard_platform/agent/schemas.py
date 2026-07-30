@@ -218,7 +218,15 @@ class AgentStatus(BaseModel):
     current_model: str | None
     current_map_name: str | None = None
     mapping_running: bool = False
+    mapping_mode: Literal["indoor_2d", "outdoor_3d"] | None = None
+    mapping_backend: Literal["slam_toolbox", "fastlio2", "glim"] | None = None
+    outdoor_recording: bool = False
+    outdoor_recording_state: Literal["idle", "starting", "recording"] = "idle"
+    outdoor_recording_name: str | None = None
     navigation_running: bool = False
+    exploration_running: bool = False
+    exploration_state: str = "idle"
+    exploration_detail: str | None = None
     rviz_available: bool = False
     rviz_running: bool = False
     base_status: BaseStatus | None = None

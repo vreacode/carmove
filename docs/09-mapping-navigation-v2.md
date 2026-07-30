@@ -5,7 +5,7 @@
 ## 当前链路
 
 ```text
-C16 PointCloud2
+Hesai XT-16 PointCloud2
     -> pointcloud_to_laserscan (target_frame=laser)
     -> /scan
     -> slam_toolbox async_slam_toolbox_node    # 建图
@@ -32,7 +32,7 @@ map + /scan + odom_combined
 
 ## 验收顺序
 
-1. 先启动底盘基础链路和雷达，确认 `/odom`、`/c16/lslidar_point_cloud`、`/tf_static` 存在。
+1. 先启动底盘基础链路和雷达，确认 `/odom`、`/lidar_points`、`/tf_static` 存在。
 2. 启动建图，原地观察 `/scan` 和 RViz，再在开阔区域低速走一圈后保存新地图。
 3. 停止建图后启动导航，确认 `collision_monitor`、`velocity_smoother`、`amcl`、`controller_server` 和两个 costmap 均 active。
 4. 不载人、不靠近障碍物，先发约 0.25 m 的单目标；确认 `/cmd_vel_safe` 有输出而底盘不再订阅原始 `/cmd_vel_nav`。

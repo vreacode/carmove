@@ -116,6 +116,8 @@ class AgentBridge:
                         if not line.strip():
                             continue
                         payload = json.loads(line)
+                        payload.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+                        payload.setdefault("source", "agent")
                         await self.hub.broadcast_log(payload)
             except Exception as exc:
                 await self.hub.broadcast_log(self.hub.log("system", "error", f"log stream dropped: {exc}"))

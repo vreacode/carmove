@@ -1,0 +1,59 @@
+/**:
+  ros__parameters:
+    # Conservative Jetson profile: retain enough geometry for a 16-line
+    # outdoor scan while keeping CPU and map memory bounded.
+    feature_extract_enable: false
+    # Per-ring azimuth thinning is already handled by the adapter. Keeping
+    # this at 1 prevents FAST-LIO's index filter from accidentally retaining
+    # only rings 0/4/8/12 from Hesai's interleaved 0..15 point order.
+    point_filter_num: 1
+    max_iteration: 3
+    filter_size_surf: 0.4
+    filter_size_map: 0.4
+    cube_side_length: 1000.0
+    runtime_pos_log_enable: false
+    map_file_path: "/tmp/carmove_outdoor_map.pcd"
+
+    common:
+      lid_topic: "/lidar_points_fastlio"
+      imu_topic: "/imu/data_raw"
+      time_sync_en: false
+      time_offset_lidar_to_imu: 0.0
+
+    preprocess:
+      # The adapter exposes a Velodyne-compatible x/y/z/intensity/time/ring
+      # layout. "time" is relative seconds from the first point in each frame.
+      lidar_type: 2
+      scan_line: 16
+      scan_rate: 10
+      timestamp_unit: 0
+      blind: 0.5
+
+    mapping:
+      acc_cov: 0.1
+      gyr_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+      fov_degree: 360.0
+      det_range: 100.0
+
+      # FAST-LIO defines these as the LiDAR pose in the IMU body frame.
+      # The values mirror the currently deployed top_akm_dl static TF:
+      # base_footprint/gyro_link -> laser.
+      extrinsic_est_en: false
+      extrinsic_T: [0.25033, 0.00182, 0.15040]
+      extrinsic_R: [0.0, -1.0, 0.0,
+                    1.0,  0.0, 0.0,
+                    0.0,  0.0, 1.0]
+
+    publish:
+      path_en: true
+      effect_map_en: false
+      map_en: true
+      scan_publish_en: true
+      dense_publish_en: false
+      scan_bodyframe_pub_en: true
+
+    pcd_save:
+      pcd_save_en: true
+      interval: -1

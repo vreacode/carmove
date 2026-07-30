@@ -69,6 +69,7 @@ Low latency comes from WebRTC. The browser does **not** pull RTSP directly. The 
 - Real-time log aggregation from the Agent to the server and then to the frontend through WebSocket.
 - Whitelist-only car control commands with ACK responses.
 - Workflow panels for mapping, map saving, navigation, and RViz launch through the Agent whitelist.
+- Independent outdoor 3D mode with XT-16 per-point timestamps, Yesense IMU, selectable GLIM/FAST-LIO2 backends, neutral A/B rosbag recording, RViz, and timestamp-named outputs.
 - Online 2D map viewer that reads saved `yaml + pgm` maps from the configured maps directory.
 - Status cards for Agent availability, video source, model, CPU, memory, GPU, and heartbeat.
 
@@ -166,10 +167,12 @@ Everything else is already aligned to the current device profile and should norm
 - `AVAILABLE_MODELS=helmet/fall/smoke/danger`
 - `MAPS_DIRECTORY=/home/nvidia/Desktop/wheeltec_ros2/maps`
 - `DEFAULT_MAP_NAME=gmap_map`
-- `PRESET_COMMANDS=start_mapping/save_map/start_navigation/open_rviz/stop_mapping/stop_navigation/stop_all`
-- `LIDAR_POINT_TOPIC=/c16/lslidar_point_cloud`
+- `PRESET_COMMANDS` includes indoor mapping/navigation, GLIM and FAST-LIO2 outdoor mapping, plus neutral outdoor rosbag recording
+- `LIDAR_DRIVER=hesai_xt16`
+- `LIDAR_POINT_TOPIC=/lidar_points`
+- `HESAI_LIDAR_CONFIG=/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/config/lidar/hesai_xt16.yaml`
 - `IMU_TOPIC=/imu/data`
-- `ROS2_LIDAR_SETUP_BASH=/home/nvidia/fastlio2_ws/install/setup.bash`
+- `ROS2_LIDAR_SETUP_BASH=/home/nvidia/ros2_ws/install/setup.bash`
 - `ROS2_IMU_SETUP_BASH=/home/nvidia/serial-ros2/install/setup.bash;/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash`
 - `SENSOR_BRIDGE_ENABLED=false` for the default stable demo profile
 - `CONTROL_COMMAND_MAP` stays on the safe placeholder whitelist until you provide the real chassis command set
@@ -187,16 +190,23 @@ Current device-aligned defaults in `.env.example`:
 - Tailscale host: empty
 - Visible RTSP: `rtsp://10.16.16.10:8554/video1`
 - Infrared RTSP: `rtsp://10.16.16.10:8554/video2`
-- Lidar topic: `/c16/lslidar_point_cloud`
+- Lidar: Hesai PandarXT-16, official Hesai ROS2 driver
+- Lidar topic: `/lidar_points`
 - IMU topic: `/imu/data`
 - Models: `helmet.pt`, `fall.pt`, `smoke.pt`, `danger.pt`
 - Presets:
-  - `start_mapping -> background bash /home/nvidia/start_2d_mapping.sh`
+  - `start_mapping -> background bash scripts/start_mapping_integrated.sh`
   - `save_map -> ros2 run nav2_map_server map_saver_cli -f /home/nvidia/Desktop/wheeltec_ros2/maps/{map_name}`
-  - `start_navigation -> background bash /home/nvidia/start_2d_navigation.sh {map_name}`
-  - `open_rviz -> background rviz2 -d /opt/ros/humble/share/nav2_bringup/rviz/nav2_default_view.rviz`
-  - `stop_mapping -> bash /home/nvidia/start_2d_mapping.sh stop`
-  - `stop_navigation -> bash /home/nvidia/start_2d_navigation.sh stop`
+  - `start_navigation -> background bash scripts/start_navigation_integrated.sh {map_name}`
+  - `start_outdoor_mapping -> background bash scripts/start_outdoor_mapping.sh start {map_name}`
+  - `save_outdoor_map -> bash scripts/start_outdoor_mapping.sh save`
+  - `stop_outdoor_mapping -> bash scripts/start_outdoor_mapping.sh stop`
+  - `start_glim_mapping -> background bash scripts/start_glim_mapping.sh start {map_name}`
+  - `save_glim_map / stop_glim_mapping -> gracefully stop and save the GLIM graph`
+  - `start_outdoor_recording / stop_outdoor_recording -> record one algorithm-neutral XT-16 + Yesense rosbag`
+  - `open_rviz -> background bash scripts/open_rviz.sh`
+  - `stop_mapping -> bash scripts/start_mapping_integrated.sh stop`
+  - `stop_navigation -> bash scripts/start_navigation_integrated.sh stop`
 - Control commands are still safe placeholders and must be replaced only after you confirm the real chassis command line.
 - Recording is not started through a preset command. Use `POST /api/media/recording/start` and `POST /api/media/recording/stop` for RTSP recording, and `POST /api/dev-recording/start` and `POST /api/dev-recording/stop` for on-demand desktop capture.
 
@@ -273,6 +283,33 @@ Notes:
 - `sensor_bridge` is retained as a debug capability, but it is not part of the default stable demo flow.
 - Logs go to `dashboard_platform/runtime/logs/`.
 - PID files go to `dashboard_platform/runtime/pids/`.
+
+## Outdoor 3D Mapping
+
+The outdoor workflow is intentionally separate from indoor slam_toolbox/Nav2.
+GLIM is the recommended mapping candidate and FAST-LIO2 remains the baseline:
+
+```bash
+cd /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
+bash scripts/start_glim_mapping.sh check
+bash scripts/start_glim_mapping.sh start
+bash scripts/start_glim_mapping.sh stop
+
+bash scripts/start_outdoor_mapping.sh check
+bash scripts/start_outdoor_mapping.sh start
+bash scripts/start_outdoor_mapping.sh save
+bash scripts/start_outdoor_mapping.sh stop
+```
+
+The web Navigation page exposes both backends and neutral A/B recording under
+`室外 3D`. Starting either mapping workflow does not start the chassis or move
+the vehicle. GLIM writes a graph/trajectory directory, while FAST-LIO2 writes
+a timestamp-named PCD under `/home/nvidia/Desktop/wheeltec_ros2/maps/outdoor/`.
+
+Neither an outdoor PCD nor a GLIM graph is directly a Nav2 map. Ground/obstacle projection and
+repeatable global localization must be validated before outdoor autonomous
+navigation is enabled. See `docs/11-outdoor-mapping-navigation.md` in the
+canonical repository for the rollout and field-test checklist.
 
 ## Desktop Screen Recording
 
@@ -595,7 +632,7 @@ These are good sources of truth for RViz and future refinement. They are not cop
   - `/home/nvidia/serial-ros2/install/setup.bash`
   - `/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash`
 - It subscribes to:
-  - `/c16/lslidar_point_cloud`
+  - `/lidar_points`
   - `/imu/data`
 - It downsamples pointcloud frames before sending them to the frontend:
   - `POINTCLOUD_MAX_POINTS`
@@ -612,13 +649,13 @@ These are good sources of truth for RViz and future refinement. They are not cop
 
 ### Sensor Startup Notes
 
-If `/c16/lslidar_point_cloud` or `/imu/data` is offline, the dashboard will show the sensor panel as offline and surface a waiting message instead of failing silently.
+If `/lidar_points` or `/imu/data` is offline, the dashboard will show the sensor panel as offline and surface a waiting message instead of failing silently.
 
 Typical bring-up commands on the board:
 
 ```bash
 source /home/nvidia/fastlio2_ws/install/setup.bash
-ros2 launch lslidar_driver lslidar_c16_launch.py
+bash scripts/ensure_lidar_hesai_xt16.sh start
 ```
 
 ```bash

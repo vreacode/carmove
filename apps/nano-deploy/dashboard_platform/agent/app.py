@@ -364,7 +364,13 @@ async def run_preset(request: PresetRequest) -> LoginlessAck:
         "map_name": request.variables.get("map_name", settings.default_map_name),
     }
     try:
-        if request.name in {"start_mapping", "start_navigation"}:
+        if request.name in {
+            "start_mapping",
+            "start_navigation",
+            "start_exploration",
+            "start_outdoor_mapping",
+            "start_glim_mapping",
+        }:
             await motion_manager.stop_cruise_if_active(navigation_running=False)
         if request.name == "start_navigation":
             try:
@@ -433,6 +439,21 @@ async def map_metadata(map_name: str) -> dict:
         raise HTTPException(status_code=404, detail=f"map '{map_name}' not found") from exc
 
 
+@app.delete("/maps/{map_name}", dependencies=[Depends(verify_token)])
+async def map_delete(map_name: str) -> dict:
+    status = status_collector.collect()
+    if status.current_map_name == map_name and (status.mapping_running or status.navigation_running):
+        raise HTTPException(status_code=409, detail="cannot delete the active map while mapping or navigation is running")
+    try:
+        deleted = map_manager.delete_map(map_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"map '{map_name}' not found") from exc
+    log_buffer.add("control", "info", f"deleted map '{map_name}': {', '.join(deleted)}")
+    return {"status": "deleted", "name": map_name, "files": deleted}
+
+
 @app.get("/maps/{map_name}/pgm", dependencies=[Depends(verify_token)])
 async def map_image(map_name: str) -> FileResponse:
     try:
@@ -494,6 +515,18 @@ async def capture_gallery_frame(group: str, frame_name: str) -> FileResponse:
     if path is None:
         raise HTTPException(status_code=404, detail="capture frame not found")
     return FileResponse(path, media_type="image/jpeg", filename=path.name)
+
+
+@app.delete("/capture/gallery/{group}", dependencies=[Depends(verify_token)])
+async def capture_gallery_delete(group: str) -> dict:
+    try:
+        return capture_manager.delete_gallery(group)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="capture group not found") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/capture/start", dependencies=[Depends(verify_token)])

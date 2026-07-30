@@ -16,7 +16,7 @@
 ## 目前可确认的链路
 
     相机 RTSP ──> nano_rtsp_detect.py ──> 模型事件/快照 ──> Dashboard
-    激光雷达 ──> /c16/lslidar_point_cloud ──> 点云转 /scan ──> SLAM/Nav2
+    Hesai XT-16 ──> /lidar_points ──> 点云转 /scan ──> SLAM/Nav2
     Yesense IMU ──> /imu/data_raw ──> republisher ──> /imu/data
     底盘 ROS2 ──> /cmd_vel_nav ──> 阿克曼线控底盘
     Agent <──> Server <──> Web 前端

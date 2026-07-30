@@ -100,7 +100,15 @@ export type SystemStatus = {
   current_model?: string | null;
   current_map_name?: string | null;
   mapping_running?: boolean;
+  mapping_mode?: "indoor_2d" | "outdoor_3d" | null;
+  mapping_backend?: "slam_toolbox" | "fastlio2" | "glim" | null;
+  outdoor_recording?: boolean;
+  outdoor_recording_state?: "idle" | "starting" | "recording";
+  outdoor_recording_name?: string | null;
   navigation_running?: boolean;
+  exploration_running?: boolean;
+  exploration_state?: string;
+  exploration_detail?: string | null;
   rviz_available?: boolean;
   rviz_running?: boolean;
   base_status?: BaseStatus | null;

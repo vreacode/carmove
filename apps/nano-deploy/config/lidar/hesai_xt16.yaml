@@ -1,0 +1,61 @@
+# Hesai PandarXT-16 / XT-16 profile for the Wheeltec Nano deployment.
+#
+# The existing vehicle TF already publishes base_footprint -> laser.  Keep
+# the driver-side transform disabled so the physical mounting calibration is
+# applied exactly once by ROS TF.
+#
+# The XT-16 is configured on the vehicle Ethernet profile: sensor
+# 10.16.16.11/24, host 10.16.16.2, gateway 10.16.16.1, VLAN disabled.
+# The gateway is recorded for the field network; the ROS driver only needs
+# the sensor/host addresses and UDP/PTC ports below.
+lidar:
+  - driver:
+      use_gpu: false
+      source_type: 1
+      lidar_udp_type:
+        device_ip_address: 10.16.16.11
+        udp_port: 2368
+        ptc_port: 9347
+        multicast_ip_address: ""
+        use_ptc_connected: true
+        host_ip_address: 10.16.16.2
+        fault_message_port: 0
+        correction_file_path: "/home/nvidia/ros2_ws/src/HesaiLidar_ROS_2.0-master/src/driver/HesaiLidar_SDK_2.0/correction/angle_correction/PandarXT-16_Angle Correction File.csv"
+        firetimes_path: "/home/nvidia/ros2_ws/src/HesaiLidar_ROS_2.0-master/src/driver/HesaiLidar_SDK_2.0/correction/firetime_correction/PandarXT-16_Firetime Correction File.csv"
+        use_someip: false
+        standby_mode: -1
+        speed: -1
+        ptc_mode: 0
+        certFile: ""
+        privateKeyFile: ""
+        caFile: ""
+
+      # XT-16 points are published in the sensor frame.  Do not apply a
+      # second extrinsic transform here; the vehicle's laser TF is retained.
+      use_timestamp_type: 1
+      transform_flag: false
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      roll: 0.0
+      pitch: 0.0
+      yaw: 0.0
+      frame_start_azimuth: 0
+      fov_start: -1
+      fov_end: -1
+      enable_packet_loss_tool: true
+      distance_correction_flag: false
+      xt_spot_correction: false
+      device_udp_src_port: 0
+      device_fault_port: 0
+
+    ros:
+      ros_frame_id: laser
+      ros_recv_packet_topic: /lidar_packets
+      ros_send_packet_topic: /lidar_packets
+      ros_send_point_cloud_topic: /lidar_points
+      ros_send_imu_topic: /lidar_imu
+      ros_send_packet_loss_topic: /lidar_packets_loss
+      send_packet_ros: false
+      send_point_cloud_ros: true
+      send_imu_ros: true

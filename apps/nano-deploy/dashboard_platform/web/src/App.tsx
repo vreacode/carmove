@@ -16,6 +16,7 @@ import {
   SunIcon,
   MoonIcon,
   SwatchIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { Panel } from "./components/Panel";
 import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
@@ -63,17 +64,33 @@ function describeError(error: unknown) {
   if (raw.includes("snapshot capture failed")) return "拍照失败：未能抓取当前视频源。";
   if (raw.includes("snapshot capture timed out")) return "拍照超时：请检查 RTSP 源状态。";
   if (raw.includes("map image") && raw.includes("not found")) return "地图图像不存在：请确认该地图已正确保存。";
+  if (raw.includes("cannot delete the active map")) return "当前地图正在建图或导航，停止对应任务后才能删除。";
   if (raw.includes("Map not found:")) return "启动导航失败：所选地图不存在，请先确认地图名称或重新保存地图。";
   if (raw.includes("Navigation params file not found:")) return "启动导航失败：导航参数文件缺失，请检查部署路径。";
   if (raw.includes("wheeltec_robot not ready")) return "启动导航失败：底盘节点未就绪，请先启动底盘。";
   if (raw.includes("/odom not ready")) return "启动导航失败：里程计未就绪，请先确认底盘状态。";
-  if (raw.includes("/c16/lslidar_point_cloud not ready")) return "启动导航失败：雷达点云未就绪，请检查雷达驱动。";
+  if (raw.includes("not ready") && (raw.includes("/lidar_points") || raw.includes("/c16/lslidar_point_cloud"))) return "启动导航失败：雷达点云未就绪，请检查雷达驱动。";
   if (raw.includes("/map is not ready")) return "保存地图失败：当前没有可用的 /map，请先启动建图。";
   if (raw.includes("navigation is not running")) return "导航尚未运行：请先启动导航，再发布初始位姿或目标点。";
   if (raw.includes("a navigation goal is already active")) return "已有导航目标执行中：请先取消当前目标。";
   if (raw.includes("timed out")) return "操作超时：请稍后重试，并检查后端日志。";
   if (raw.includes("stream offer failed")) return "视频协商失败：请检查 Agent、RTSP 和网络状态。";
   return raw;
+}
+
+function timestampMapName(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `map_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function timestampOutdoorMapName(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `outdoor_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function timestampOutdoorDataName(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `outdoor_data_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
 function App() {
@@ -98,6 +115,8 @@ function App() {
   const [mapMetadata, setMapMetadata] = useState<MapMetadata | null>(null);
   const [mapImageUrl, setMapImageUrl] = useState("");
   const [mapNameInput, setMapNameInput] = useState("");
+  const [mappingWorkspace, setMappingWorkspace] = useState<"indoor" | "outdoor">("indoor");
+  const [outdoorBackend, setOutdoorBackend] = useState<"glim" | "fastlio2">("glim");
   const [mapLoading, setMapLoading] = useState(false);
   const [navigationState, setNavigationState] = useState<NavigationState | null>(null);
   const [mapPointMode, setMapPointMode] = useState<"none" | "initial" | "goal">("none");
@@ -123,6 +142,7 @@ function App() {
   const [basePending, setBasePending] = useState<"" | "start" | "stop">("");
   const [modePending, setModePending] = useState<"" | "dry_run" | "real">("");
   const [refreshingMaps, setRefreshingMaps] = useState(false);
+  const [deletingMapName, setDeletingMapName] = useState("");
   const [useFallback, setUseFallback] = useState(false);
   const cruiseSteeringRequestRef = useRef<Promise<void> | null>(null);
   const cruiseSteeringDesiredRef = useRef<"center" | "left" | "right">("center");
@@ -135,6 +155,16 @@ function App() {
   }
 
   const activeWorkspace = workspaceMeta[activeTab];
+
+  useEffect(() => {
+    if (status?.mapping_mode === "outdoor_3d") setMappingWorkspace("outdoor");
+  }, [status?.mapping_mode]);
+
+  useEffect(() => {
+    if (status?.mapping_backend === "glim" || status?.mapping_backend === "fastlio2") {
+      setOutdoorBackend(status.mapping_backend);
+    }
+  }, [status?.mapping_backend]);
 
   useEffect(() => {
     const syncWorkspaceFromUrl = () => setActiveTab(tabFromHash(window.location.hash));
@@ -623,24 +653,103 @@ function App() {
     }
   }
 
-  async function runPreset(name: string) {
+  async function runPreset(name: string, mapNameOverride = "") {
     try {
       setPresetPending(name);
       setError("");
+      const requestedMapName = mapNameOverride || mapNameInput || selectedMapName || status?.current_map_name || "gmap_map";
+      let baseStart: Promise<SystemStatus["base_status"]> | null = null;
+      if (name === "start_mapping" || name === "start_navigation" || name === "start_exploration") {
+        const current = await apiFetch<SystemStatus>("/api/system/status", token);
+        const isBaseReady = (candidate: SystemStatus) =>
+          !!candidate.base_status?.wheeltec_robot_online &&
+          !!candidate.base_status?.cmd_vel_subscriber_online &&
+          !!candidate.base_status?.odom_online;
+        if (!isBaseReady(current)) {
+          baseStart = apiFetch<SystemStatus["base_status"]>("/api/base/start", token, { method: "POST" });
+        }
+      }
       await apiFetch("/api/preset/run", token, {
         method: "POST",
-        body: JSON.stringify({ name, variables: { map_name: mapNameInput || selectedMapName || status?.current_map_name || "gmap_map" } }),
+        body: JSON.stringify({ name, variables: { map_name: requestedMapName } }),
       });
+      if (baseStart) {
+        const startedBase = await baseStart;
+        if (
+          !startedBase?.wheeltec_robot_online ||
+          !startedBase?.cmd_vel_subscriber_online ||
+          !startedBase?.odom_online
+        ) {
+          throw new Error(startedBase?.last_error || "底盘启动后仍未就绪，请在系统诊断中查看底盘日志。");
+        }
+      }
       await new Promise((resolve) => window.setTimeout(resolve, name === "start_navigation" ? 1200 : 400));
       const fresh = await apiFetch<SystemStatus>("/api/system/status", token);
       setStatus(fresh);
       if (name === "save_map") {
         await refreshMaps();
+        setSelectedMapName(requestedMapName);
       }
     } catch (err) {
       setError(describeError(err));
     } finally {
       setPresetPending("");
+    }
+  }
+
+  async function startMappingWithTimestamp() {
+    const generatedName = timestampMapName();
+    setMapNameInput(generatedName);
+    await runPreset("start_mapping", generatedName);
+  }
+
+  async function startExplorationWithTimestamp() {
+    const generatedName = timestampMapName();
+    setMapNameInput(generatedName);
+    await runPreset("start_exploration", generatedName);
+  }
+
+  async function startOutdoorMappingWithTimestamp() {
+    const generatedName = timestampOutdoorMapName();
+    setMapNameInput(generatedName);
+    await runPreset(outdoorBackend === "glim" ? "start_glim_mapping" : "start_outdoor_mapping", generatedName);
+  }
+
+  async function saveOutdoorMap() {
+    const activeBackend = status?.mapping_backend === "glim" ? "glim" : "fastlio2";
+    await runPreset(activeBackend === "glim" ? "save_glim_map" : "save_outdoor_map");
+  }
+
+  async function stopOutdoorMapping() {
+    const activeBackend = status?.mapping_backend === "glim" ? "glim" : "fastlio2";
+    await runPreset(activeBackend === "glim" ? "stop_glim_mapping" : "stop_outdoor_mapping");
+  }
+
+  async function startOutdoorRecordingWithTimestamp() {
+    const generatedName = timestampOutdoorDataName();
+    await runPreset("start_outdoor_recording", generatedName);
+  }
+
+  async function deleteMap(mapName: string) {
+    try {
+      setDeletingMapName(mapName);
+      setError("");
+      await apiFetch(`/api/maps/${encodeURIComponent(mapName)}`, token, { method: "DELETE" });
+      const payload = await apiFetch<{ items: MapEntry[] }>("/api/maps", token);
+      setMaps(payload.items);
+      if (selectedMapName === mapName) {
+        const replacement = payload.items[0]?.name || "";
+        setSelectedMapName(replacement);
+        setMapNameInput(replacement);
+        setMapMetadata(null);
+        setMapImageUrl("");
+        setInitialPoint(null);
+        setGoalPoint(null);
+      }
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setDeletingMapName("");
     }
   }
 
@@ -1141,45 +1250,158 @@ function App() {
 
         {activeTab === "navigation" ? <div id="section-navigation" className="grid gap-5 xl:grid-cols-12">
           <div className="h-full xl:col-span-4">
-            <Panel title="建图与导航" subtitle="管理建图、地图保存、导航与 RViz。" className="h-full min-h-[560px]">
+            <Panel title="建图与导航" subtitle="一键启动流程，RViz 会自动打开。" className="h-full min-h-[560px]">
               <div className="flex h-full flex-col">
                 <div className="mb-5 grid grid-cols-2 gap-4">
                   <StatCard label="当前地图" value={status?.current_map_name || selectedMapName || "--"} />
                   <StatCard label="Mapping" value={status?.mapping_running ? "running" : "idle"} />
                   <StatCard label="Navigation" value={status?.navigation_running ? "running" : "idle"} />
-                  <StatCard label="RViz" value={status?.rviz_running ? "running" : status?.rviz_available ? "available" : "unavailable"} />
+                  <StatCard label="自主探索" value={status?.exploration_running ? status.exploration_state || "running" : status?.exploration_state || "idle"} />
+                </div>
+                <div className="mb-5 grid grid-cols-2 rounded-xl border border-base bg-panel p-1">
+                  <button
+                    type="button"
+                    onClick={() => setMappingWorkspace("indoor")}
+                    className={classNames(
+                      "rounded-lg px-3 py-2.5 text-sm font-medium transition",
+                      mappingWorkspace === "indoor" ? "bg-card text-primary shadow-sm" : "text-muted hover:text-secondary",
+                    )}
+                  >
+                    室内 2D
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMappingWorkspace("outdoor")}
+                    className={classNames(
+                      "rounded-lg px-3 py-2.5 text-sm font-medium transition",
+                      mappingWorkspace === "outdoor" ? "bg-slate-900 text-white shadow-sm" : "text-muted hover:text-secondary",
+                    )}
+                  >
+                    室外 3D
+                  </button>
                 </div>
                 <div className="space-y-4">
-                  <select
-                    value={selectedMapName}
-                    onChange={(event) => {
-                      setSelectedMapName(event.target.value);
-                      setMapNameInput(event.target.value);
-                    }}
-                    className="w-full rounded-xl border border-base bg-panel px-4 py-3.5 text-secondary"
-                  >
-                    {maps.map((item) => (
-                      <option key={item.name} value={item.name}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
+                  {mappingWorkspace === "indoor" ? <select
+                      value={selectedMapName}
+                      onChange={(event) => {
+                        setSelectedMapName(event.target.value);
+                        setMapNameInput(event.target.value);
+                      }}
+                      className="w-full rounded-xl border border-base bg-panel px-4 py-3.5 text-secondary"
+                    >
+                      {maps.map((item) => (
+                        <option key={item.name} value={item.name}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select> : <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">室外 LIO 后端</span>
+                        <span className="rounded-full bg-white px-2 py-1 text-[11px] text-sky-700">
+                          {status?.mapping_backend ? `运行：${status.mapping_backend.toUpperCase()}` : "XT-16 · 3D"}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={!!status?.mapping_running || !!status?.outdoor_recording}
+                          onClick={() => setOutdoorBackend("glim")}
+                          className={classNames(
+                            "rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                            outdoorBackend === "glim"
+                              ? "border-sky-500 bg-sky-600 text-white shadow-sm"
+                              : "border-sky-200 bg-white text-sky-950 hover:border-sky-400",
+                          )}
+                        >
+                          <span className="block text-sm font-semibold">GLIM</span>
+                          <span className={classNames("mt-0.5 block text-[11px]", outdoorBackend === "glim" ? "text-sky-100" : "text-sky-700")}>推荐 · 回环与全局优化</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!!status?.mapping_running || !!status?.outdoor_recording}
+                          onClick={() => setOutdoorBackend("fastlio2")}
+                          className={classNames(
+                            "rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                            outdoorBackend === "fastlio2"
+                              ? "border-slate-700 bg-slate-900 text-white shadow-sm"
+                              : "border-sky-200 bg-white text-sky-950 hover:border-sky-400",
+                          )}
+                        >
+                          <span className="block text-sm font-semibold">FAST-LIO2</span>
+                          <span className={classNames("mt-0.5 block text-[11px]", outdoorBackend === "fastlio2" ? "text-slate-300" : "text-sky-700")}>基线 · 轻量实时</span>
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-sky-900">两套后端共用 XT-16 逐点时间与 Yesense IMU；启动建图不会自动驱动车辆。</p>
+                    </div>}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label className="text-xs font-medium uppercase tracking-[0.14em] text-disabled">{mappingWorkspace === "outdoor" ? "本次室外地图名称" : "本次建图名称"}</label>
+                      <span className="rounded-full border border-accent-200 bg-accent-100 px-2 py-1 text-[11px] text-accent-700">启动时自动生成</span>
+                    </div>
+                    <input
                     value={mapNameInput}
                     onChange={(event) => setMapNameInput(event.target.value)}
-                    placeholder="地图名，如 gmap_map"
+                    placeholder="点击启动建图后自动生成"
                     className="w-full rounded-xl border border-base bg-panel px-4 py-3.5 text-secondary"
-                  />
+                    />
+                  </div>
                 </div>
-                <div className="mt-5 grid grid-cols-2 gap-4">
-                  <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_mapping" ? "启动中..." : "启动建图"} disabled={!!presetPending} onClick={() => void runPreset("start_mapping")} />
-                  <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "save_map" ? "保存中..." : "保存地图"} disabled={!!presetPending} onClick={() => void runPreset("save_map")} />
-                  <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_navigation" ? "启动中..." : "启动导航"} disabled={!!presetPending} onClick={() => void runPreset("start_navigation")} />
-                  <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "open_rviz" ? "打开中..." : "打开 RViz"} disabled={!!presetPending} onClick={() => void runPreset("open_rviz")} />
-                  <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_mapping" ? "停止中..." : "停止建图"} disabled={!!presetPending} onClick={() => void runPreset("stop_mapping")} />
-                  <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_navigation" ? "停止中..." : "停止导航"} disabled={!!presetPending} onClick={() => void runPreset("stop_navigation")} />
-                </div>
-                <div className="mt-5 rounded-xl border border-base bg-card/50 p-4">
+                {mappingWorkspace === "indoor" ? <>
+                  <div className="mt-5 grid grid-cols-2 gap-4">
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_mapping" ? "正在启动建图与 RViz..." : "启动建图 · 自动命名"} disabled={!!presetPending} onClick={() => void startMappingWithTimestamp()} primary wide />
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_exploration" ? "正在启动自主探索..." : "自主建图 · 前沿探索"} disabled={!!presetPending} onClick={() => void startExplorationWithTimestamp()} />
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "save_map" ? "保存中..." : "保存地图"} disabled={!!presetPending} onClick={() => void runPreset("save_map")} />
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_navigation" ? "启动中..." : "启动导航 · 自动 RViz"} disabled={!!presetPending} onClick={() => void runPreset("start_navigation")} />
+                    <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_mapping" ? "停止中..." : "停止建图"} disabled={!!presetPending} onClick={() => void runPreset("stop_mapping")} />
+                    <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_exploration" ? "停止中..." : "停止自主建图"} disabled={!!presetPending} onClick={() => void runPreset("stop_exploration")} />
+                    <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_navigation" ? "停止中..." : "停止导航"} disabled={!!presetPending} onClick={() => void runPreset("stop_navigation")} />
+                  </div>
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p className="font-medium">自主建图首次运行请保持现场有人看护</p>
+                    <p className="mt-1 text-xs text-amber-800">{status?.exploration_detail || "系统会自动选择未知区域边界；不可达目标会加入避让列表，探索完成后自动保存地图。"}</p>
+                  </div>
+                </> : <>
+                  <div className="mt-5 grid grid-cols-2 gap-4">
+                    <ActionButton
+                      icon={<BoltIcon className="h-5 w-5" />}
+                      label={presetPending === "start_glim_mapping" || presetPending === "start_outdoor_mapping" ? `正在启动 ${outdoorBackend === "glim" ? "GLIM" : "FAST-LIO2"}...` : `启动 ${outdoorBackend === "glim" ? "GLIM" : "FAST-LIO2"} 建图`}
+                      disabled={!!presetPending || !!status?.mapping_running || !!status?.outdoor_recording}
+                      onClick={() => void startOutdoorMappingWithTimestamp()}
+                      primary
+                      wide
+                    />
+                    <ActionButton
+                      icon={<BoltIcon className="h-5 w-5" />}
+                      label={presetPending === "save_glim_map" || presetPending === "save_outdoor_map" ? "保存中..." : status?.mapping_backend === "glim" ? "结束并保存 GLIM" : "保存当前 PCD"}
+                      disabled={!!presetPending || status?.mapping_mode !== "outdoor_3d"}
+                      onClick={() => void saveOutdoorMap()}
+                    />
+                    {(status?.mapping_backend || outdoorBackend) !== "glim" ? <ActionButton
+                      icon={<StopCircleIcon className="h-5 w-5" />}
+                      label={presetPending === "stop_outdoor_mapping" ? "保存并停止中..." : "保存并停止"}
+                      disabled={!!presetPending || status?.mapping_mode !== "outdoor_3d"}
+                      onClick={() => void stopOutdoorMapping()}
+                    /> : null}
+                    <ActionButton
+                      icon={<PlayCircleIcon className="h-5 w-5" />}
+                      label={presetPending === "start_outdoor_recording" || status?.outdoor_recording_state === "starting" ? "正在准备录包 · 请保持静止" : status?.outdoor_recording ? `录制中 · ${status.outdoor_recording_name || "原始数据"}` : "记录 A/B 原始数据"}
+                      disabled={!!presetPending || !!status?.mapping_running || !!status?.outdoor_recording}
+                      onClick={() => void startOutdoorRecordingWithTimestamp()}
+                    />
+                    <ActionButton
+                      icon={<StopCircleIcon className="h-5 w-5" />}
+                      label={presetPending === "stop_outdoor_recording" ? "停止并校验中..." : "停止原始数据记录"}
+                      disabled={!!presetPending || !status?.outdoor_recording}
+                      onClick={() => void runPreset("stop_outdoor_recording")}
+                    />
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label="室外自主导航 · 场测后开放" disabled onClick={() => undefined} />
+                  </div>
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
+                    <p className="font-medium">当前阶段：先把室外 3D 地图和轨迹做稳</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-700">建议先“记录 A/B 原始数据”，开一条闭环路线后再离线比较两种算法；GNSS 当前定位状态为 0，暂不开放无人看护的室外自主行驶。</p>
+                  </div>
+                </>}
+                {mappingWorkspace === "indoor" ? <div className="mt-5 rounded-xl border border-base bg-card/50 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs uppercase tracking-[0.18em] text-disabled">目标点工作区</p>
@@ -1205,7 +1427,12 @@ function App() {
                     <button disabled={!goalPoint || navigationPending !== "" || !navigationState?.navigation_running} onClick={() => void sendNavigationGoal()} className="rounded-lg bg-accent-500 px-2 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "goal" ? "发送中..." : "发送目标"}</button>
                   </div>
                   <button disabled={navigationPending !== "" || !navigationState?.goal} onClick={() => void cancelNavigationGoal()} className="mt-2 w-full rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "cancel" ? "取消中..." : "取消当前目标"}</button>
-                </div>
+                </div> : <div className="mt-5 grid grid-cols-4 gap-2 rounded-xl border border-base bg-card/50 p-4">
+                  <MetaCard label="XT-16" value={status?.lidar_online ? "在线" : "等待"} />
+                  <MetaCard label="外部 IMU" value={status?.mapping_mode === "outdoor_3d" ? "200 Hz" : "随建图启动"} />
+                  <MetaCard label="后端" value={status?.mapping_backend?.toUpperCase() || outdoorBackend.toUpperCase()} />
+                  <MetaCard label="原始包" value={status?.outdoor_recording_state === "starting" ? "准备中" : status?.outdoor_recording ? "录制中" : "空闲"} />
+                </div>}
                 <div className="mt-auto pt-4">
                   {presetPending ? <p className="text-sm text-accent-600">正在执行：{presetPending}</p> : <div className="h-5" />}
                 </div>
@@ -1229,20 +1456,34 @@ function App() {
                 <p className="text-xs uppercase tracking-[0.18em] text-disabled">已保存地图</p>
                 <div className="mt-3 max-h-[400px] space-y-2 overflow-auto pr-1">
                   {maps.map((item) => (
-                    <button
+                    <div
                       key={item.name}
-                      onClick={() => {
-                        setSelectedMapName(item.name);
-                        setMapNameInput(item.name);
-                      }}
                       className={classNames(
-                        "w-full rounded-xl border px-3 py-3 text-left text-sm transition",
+                        "flex w-full items-center gap-2 rounded-xl border p-2 text-sm transition",
                         selectedMapName === item.name ? "border-accent-300 bg-accent-100 text-primary ring-2 ring-accent-400" : "border-base bg-panel text-tertiary hover:bg-card",
                       )}
                     >
-                      <p className="font-medium">{item.name}</p>
-                      <p className="mt-1 text-xs text-disabled">{new Date(item.updated_at).toLocaleString()}</p>
-                    </button>
+                      <button
+                        onClick={() => {
+                          setSelectedMapName(item.name);
+                          setMapNameInput(item.name);
+                        }}
+                        className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left"
+                      >
+                        <p className="truncate font-medium">{item.name}</p>
+                        <p className="mt-1 text-xs text-disabled">{new Date(item.updated_at).toLocaleString()}</p>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`删除地图 ${item.name}`}
+                        title={status?.current_map_name === item.name && (status.mapping_running || status.navigation_running) ? "运行中的当前地图不能删除" : "删除地图"}
+                        disabled={deletingMapName !== "" || (status?.current_map_name === item.name && (status.mapping_running || status.navigation_running))}
+                        onClick={() => void deleteMap(item.name)}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                   ))}
                   {maps.length === 0 ? <p className="text-sm text-muted">未找到已保存地图。</p> : null}
                 </div>
@@ -1578,14 +1819,19 @@ function App() {
   );
 }
 
-function ActionButton({ icon, label, onClick, disabled = false }: { icon: ReactNode; label: string; onClick: () => void; disabled?: boolean }) {
+function ActionButton({ icon, label, onClick, disabled = false, primary = false, wide = false }: { icon: ReactNode; label: string; onClick: () => void; disabled?: boolean; primary?: boolean; wide?: boolean }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={classNames(
-        "flex items-center justify-center gap-2 rounded-lg border border-base bg-panel px-3 py-2 text-[13px] font-medium text-secondary shadow-sm transition-colors",
-        disabled ? "cursor-not-allowed opacity-50 bg-card" : "hover:bg-card hover:text-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/40",
+        "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[13px] font-medium shadow-sm transition-all",
+        wide && "col-span-2 min-h-[46px]",
+        disabled
+          ? "cursor-not-allowed border-base bg-card text-disabled opacity-50"
+          : primary
+            ? "border-accent-600 bg-accent-600 text-white shadow-md hover:-translate-y-0.5 hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+            : "border-base bg-panel text-secondary hover:bg-card hover:text-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/40",
       )}
     >
       {icon}

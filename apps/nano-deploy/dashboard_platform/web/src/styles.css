@@ -151,33 +151,77 @@ select {
   width: 100%;
   display: flex;
   align-items: stretch;
-  gap: 10px;
+  gap: 6px;
   border: 1px solid var(--mobile-line);
   border-radius: 12px;
-  padding: 12px;
+  padding: 6px;
   background: var(--mobile-panel-raised);
   color: inherit;
-  cursor: pointer;
   font: inherit;
   text-align: left;
   transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
 }
 
 .mobile-history-item:hover,
-.mobile-history-item:focus-visible {
+.mobile-history-item:focus-within {
   border-color: var(--mobile-acid);
   background: rgb(var(--color-accent-100) / 0.42);
   outline: none;
   transform: translateY(-1px);
 }
 
-.mobile-history-item > img {
+.mobile-history-open {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  border: 0;
+  padding: 6px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.mobile-history-open > img {
   width: 76px;
   min-height: 66px;
   flex: 0 0 76px;
   border-radius: 8px;
   object-fit: cover;
   background: #050908;
+}
+
+.mobile-history-delete {
+  width: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  border: 1px solid rgb(239 68 68 / 0.28);
+  border-radius: 8px;
+  color: #fb7185;
+  background: rgb(127 29 29 / 0.14);
+  cursor: pointer;
+}
+
+.mobile-history-delete:hover,
+.mobile-history-delete:focus-visible {
+  border-color: rgb(251 113 133 / 0.7);
+  background: rgb(127 29 29 / 0.28);
+  outline: none;
+}
+
+.mobile-history-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.mobile-history-delete svg {
+  width: 18px;
+  height: 18px;
 }
 
 .mobile-history-item-body {

@@ -280,10 +280,24 @@ class MapManager:
     def __init__(self, settings: AgentSettings) -> None:
         self.settings = settings
 
-    def _yaml_path(self, map_name: str) -> Path:
-        if "/" in map_name or "\\" in map_name or not map_name:
+    def _maps_directory(self) -> Path:
+        return self.settings.maps_directory.resolve()
+
+    def _validate_map_name(self, map_name: str) -> str:
+        map_name = map_name.strip()
+        if not map_name or map_name in {".", ".."} or "/" in map_name or "\\" in map_name:
             raise ValueError("invalid map name")
-        return (self.settings.maps_directory / f"{map_name}.yaml").resolve()
+        return map_name
+
+    def _yaml_path(self, map_name: str) -> Path:
+        return self._maps_directory() / f"{self._validate_map_name(map_name)}.yaml"
+
+    def _map_file_path(self, filename: str) -> Path:
+        maps_directory = self._maps_directory()
+        path = (maps_directory / filename).resolve()
+        if path.parent != maps_directory:
+            raise ValueError("map file must stay inside maps directory")
+        return path
 
     def _parse_simple_yaml(self, path: Path) -> dict[str, Any]:
         payload: dict[str, Any] = {}
@@ -363,6 +377,26 @@ class MapManager:
         if not path.exists():
             raise FileNotFoundError(path)
         return path
+
+    def delete_map(self, map_name: str) -> list[str]:
+        map_name = self._validate_map_name(map_name)
+        yaml_path = self._yaml_path(map_name)
+        if not yaml_path.exists():
+            raise FileNotFoundError(map_name)
+
+        meta = self._parse_simple_yaml(yaml_path)
+        image_ref = meta.get("image", f"{map_name}.pgm").strip().strip("\"'")
+        candidates = {
+            yaml_path,
+            self._map_file_path(image_ref),
+            *(self._map_file_path(f"{map_name}{suffix}") for suffix in (".pgm", ".png", ".posegraph", ".data")),
+        }
+        deleted: list[str] = []
+        for path in sorted(candidates, key=lambda item: item.name):
+            if path.is_file():
+                path.unlink()
+                deleted.append(path.name)
+        return deleted
 
 
 class MediaManager:
@@ -1306,14 +1340,43 @@ class StatusCollector:
                     found.append(proc)
         return found
 
-    def _workflow_status(self) -> tuple[bool, bool, bool, bool, str | None]:
-        mapping_running = bool(
-            self._find_processes(
-                "/home/nvidia/start_2d_mapping.sh",
-                "scripts/start_mapping_integrated.sh",
-                "slam_toolbox",
-                "slam_gmapping",
-            )
+    def _workflow_status(
+        self,
+    ) -> tuple[
+        bool,
+        Literal["indoor_2d", "outdoor_3d"] | None,
+        Literal["slam_toolbox", "fastlio2", "glim"] | None,
+        bool,
+        bool,
+        bool,
+        str | None,
+    ]:
+        indoor_mapping_procs = self._find_processes(
+            "/home/nvidia/start_2d_mapping.sh",
+            "scripts/start_mapping_integrated.sh",
+            "slam_toolbox",
+            "slam_gmapping",
+        )
+        fastlio_mapping_procs = self._find_processes(
+            "scripts/start_outdoor_mapping.sh",
+            "hesai_fastlio_adapter_node",
+            "fastlio_mapping",
+        )
+        glim_mapping_procs = self._find_processes(
+            "scripts/start_glim_mapping.sh",
+            "glim_rosnode",
+        )
+        outdoor_mapping_procs = fastlio_mapping_procs + glim_mapping_procs
+        mapping_running = bool(indoor_mapping_procs or outdoor_mapping_procs)
+        mapping_mode = "outdoor_3d" if outdoor_mapping_procs else "indoor_2d" if indoor_mapping_procs else None
+        mapping_backend = (
+            "glim"
+            if glim_mapping_procs
+            else "fastlio2"
+            if fastlio_mapping_procs
+            else "slam_toolbox"
+            if indoor_mapping_procs
+            else None
         )
         navigation_procs = self._find_processes(
             "/home/nvidia/start_2d_navigation.sh",
@@ -1326,9 +1389,23 @@ class StatusCollector:
             "nav2_lifecycle_manager",
         )
         navigation_running = bool(navigation_procs)
+        exploration_procs = self._find_processes("scripts/frontier_explorer.py")
         rviz_running = bool(self._find_processes("rviz2 -d /opt/ros/humble/share/nav2_bringup/rviz/nav2_default_view.rviz", "rviz2"))
         rviz_available = shutil.which("rviz2") is not None
         current_map_name: str | None = None
+        if outdoor_mapping_procs:
+            state_name = "glim_mapping.state" if glim_mapping_procs else "outdoor_mapping.state"
+            state_path = self.settings.model_workdir / f"dashboard_platform/runtime/{state_name}"
+            with suppress(Exception):
+                state_values = {
+                    key: value
+                    for key, value in (
+                        line.split("=", 1)
+                        for line in state_path.read_text(encoding="utf-8").splitlines()
+                        if "=" in line
+                    )
+                }
+                current_map_name = state_values.get("map_name") or None
         for proc in navigation_procs:
             with suppress(psutil.Error):
                 cmdline = proc.cmdline()
@@ -1342,17 +1419,82 @@ class StatusCollector:
                 if current_map_name:
                     break
         if not current_map_name:
+            for proc in exploration_procs:
+                with suppress(psutil.Error):
+                    for part in proc.cmdline():
+                        if part.startswith("map_name:="):
+                            current_map_name = part.removeprefix("map_name:=")
+                            break
+                if current_map_name:
+                    break
+        if not current_map_name:
             default_yaml = self.settings.maps_directory / f"{self.settings.default_map_name}.yaml"
             if default_yaml.exists():
                 current_map_name = self.settings.default_map_name
-        return mapping_running, navigation_running, rviz_available, rviz_running, current_map_name
+        return (
+            mapping_running,
+            mapping_mode,
+            mapping_backend,
+            navigation_running,
+            rviz_available,
+            rviz_running,
+            current_map_name,
+        )
+
+    def _outdoor_recording_status(
+        self,
+    ) -> tuple[bool, Literal["idle", "starting", "recording"], str | None]:
+        recorder_running = bool(self._find_processes("ros2 bag record"))
+        launcher_running = bool(self._find_processes("scripts/record_outdoor_sensors.sh"))
+        if not recorder_running and not launcher_running:
+            return False, "idle", None
+        state: Literal["starting", "recording"] = "recording" if recorder_running else "starting"
+        state_path = self.settings.model_workdir / "dashboard_platform/runtime/outdoor_bag.state"
+        with suppress(Exception):
+            values = {
+                key: value
+                for key, value in (
+                    line.split("=", 1)
+                    for line in state_path.read_text(encoding="utf-8").splitlines()
+                    if "=" in line
+                )
+            }
+            return True, state, values.get("bag_name") or None
+        return True, state, None
+
+    def _exploration_status(self) -> tuple[bool, str, str | None]:
+        running = bool(self._find_processes("scripts/frontier_explorer.py", "scripts/start_autonomous_mapping.sh"))
+        status_path = self.settings.model_workdir / "dashboard_platform/runtime/frontier_status.json"
+        payload: dict[str, Any] = {}
+        with suppress(Exception):
+            payload = json.loads(status_path.read_text(encoding="utf-8"))
+        state = str(payload.get("state") or ("starting" if running else "idle"))
+        detail = str(payload["detail"]) if payload.get("detail") else None
+        if not running and state not in {"idle", "stopped", "complete", "save_failed"}:
+            state = "interrupted"
+            detail = "自主探索进程已退出，请查看日志"
+        return running, state, detail
 
     def collect(self) -> AgentStatus:
         now = time.time()
         if self._last_payload and now - self._last_ts <= self.settings.status_cache_seconds:
             return self._last_payload
 
-        mapping_running, navigation_running, rviz_available, rviz_running, current_map_name = self._workflow_status()
+        (
+            mapping_running,
+            mapping_mode,
+            mapping_backend,
+            navigation_running,
+            rviz_available,
+            rviz_running,
+            current_map_name,
+        ) = self._workflow_status()
+        (
+            outdoor_recording,
+            outdoor_recording_state,
+            outdoor_recording_name,
+        ) = self._outdoor_recording_status()
+        exploration_running, exploration_state, exploration_detail = self._exploration_status()
         payload = AgentStatus(
             agent_online=True,
             board_name=self.settings.board_name,
@@ -1362,7 +1504,15 @@ class StatusCollector:
             current_model=self.model_manager.runtime.model_id,
             current_map_name=current_map_name,
             mapping_running=mapping_running,
+            mapping_mode=mapping_mode,
+            mapping_backend=mapping_backend,
+            outdoor_recording=outdoor_recording,
+            outdoor_recording_state=outdoor_recording_state,
+            outdoor_recording_name=outdoor_recording_name,
             navigation_running=navigation_running,
+            exploration_running=exploration_running,
+            exploration_state=exploration_state,
+            exploration_detail=exploration_detail,
             rviz_available=rviz_available,
             rviz_running=rviz_running,
             base_status=self.base_manager.state,

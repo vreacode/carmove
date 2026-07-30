@@ -3,6 +3,8 @@ set -euo pipefail
 
 LOG_DIR="/home/nvidia/2d_mapping_logs"
 PID_FILE="/home/nvidia/2d_mapping_pids.txt"
+LIDAR_SCRIPT="/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/scripts/ensure_lidar_hesai_xt16.sh"
+LIDAR_TOPIC="${LIDAR_POINT_TOPIC:-/lidar_points}"
 
 cleanup() {
   if [[ -f "$PID_FILE" ]]; then
@@ -69,17 +71,14 @@ run_cmd "ekf" \
    ros2 launch turn_on_wheeltec_robot wheeltec_ekf.launch.py"
 
 run_cmd "lidar" \
-  "source /opt/ros/humble/setup.bash && \
-   source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && \
-   source /home/nvidia/fastlio2_ws/install/setup.bash && \
-   ros2 launch lslidar_driver lslidar_c16_launch.py"
+  "LIDAR_POINT_TOPIC=${LIDAR_TOPIC} bash ${LIDAR_SCRIPT} start"
 
 run_cmd "pcl2scan" \
   "source /opt/ros/humble/setup.bash && \
    source /home/nvidia/fastlio2_ws/install/setup.bash && \
    ros2 run pointcloud_to_laserscan pointcloud_to_laserscan_node \
      --ros-args \
-     --remap cloud_in:=/c16/lslidar_point_cloud \
+     --remap cloud_in:=${LIDAR_TOPIC} \
      --remap scan:=/scan \
      -p target_frame:=laser \
      -p min_height:=-0.15 -p max_height:=0.20 \

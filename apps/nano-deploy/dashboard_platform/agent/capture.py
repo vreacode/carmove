@@ -4,6 +4,7 @@ import asyncio
 import csv
 import os
 import re
+import shutil
 import signal
 from contextlib import suppress
 from datetime import datetime
@@ -35,6 +36,12 @@ class CaptureManager:
         if not value:
             raise ValueError("scene must contain letters, numbers, Chinese characters, '_' or '-'")
         return value[:64]
+
+    @staticmethod
+    def validate_group(group: str) -> str:
+        if not re.fullmatch(r"[0-9A-Za-z\u4e00-\u9fff_-]{1,160}", group):
+            raise ValueError("invalid capture group")
+        return group
 
     def status(self) -> CaptureStatus:
         running = bool(self.process and self.process.returncode is None)
@@ -123,8 +130,7 @@ class CaptureManager:
         return items[start : start + page_size]
 
     def gallery_latest_frame_path(self, group: str) -> Path | None:
-        if not re.fullmatch(r"[0-9A-Za-z\u4e00-\u9fff_-]{1,160}", group):
-            raise ValueError("invalid capture group")
+        group = self.validate_group(group)
         root = self.settings.capture_output_root.expanduser().resolve()
         manifest_path = root / "manifests" / f"{group}.csv"
         if not manifest_path.is_file():
@@ -146,8 +152,7 @@ class CaptureManager:
 
     def gallery_frames(self, group: str) -> list[CaptureFrameItem]:
         """Return the readable frames in one manifest, in capture order."""
-        if not re.fullmatch(r"[0-9A-Za-z\u4e00-\u9fff_-]{1,160}", group):
-            raise ValueError("invalid capture group")
+        group = self.validate_group(group)
         root = self.settings.capture_output_root.expanduser().resolve()
         manifest_path = root / "manifests" / f"{group}.csv"
         if not manifest_path.is_file():
@@ -173,6 +178,7 @@ class CaptureManager:
         return frames
 
     def gallery_frame_path(self, group: str, frame_name: str) -> Path | None:
+        group = self.validate_group(group)
         if not re.fullmatch(r"[0-9A-Za-z\u4e00-\u9fff_.-]{1,200}", frame_name):
             raise ValueError("invalid capture frame")
         root = self.settings.capture_output_root.expanduser().resolve()
@@ -189,6 +195,25 @@ class CaptureManager:
             if frame_path.name == frame_name and root in frame_path.parents and frame_path.is_file():
                 return frame_path
         return None
+
+    def delete_gallery(self, group: str) -> dict[str, object]:
+        group = self.validate_group(group)
+        root = self.settings.capture_output_root.expanduser().resolve()
+        manifest_path = (root / "manifests" / f"{group}.csv").resolve()
+        image_directory = (root / "images" / group).resolve()
+        if root not in manifest_path.parents or root not in image_directory.parents:
+            raise RuntimeError("capture paths must stay inside capture_output_root")
+        if not manifest_path.is_file():
+            raise FileNotFoundError(group)
+        if self.process and self.process.returncode is None and Path(self._status.manifest_path).stem == group:
+            raise RuntimeError("cannot delete an active capture group")
+
+        frames_deleted = sum(1 for path in image_directory.rglob("*") if path.is_file()) if image_directory.is_dir() else 0
+        if image_directory.is_dir():
+            shutil.rmtree(image_directory)
+        manifest_path.unlink()
+        self.log_buffer.add("capture", "info", f"deleted capture group '{group}' frames={frames_deleted}")
+        return {"status": "deleted", "group": group, "frames_deleted": frames_deleted}
 
     async def _read_stdout(self, stream: asyncio.StreamReader | None) -> None:
         if stream is None:

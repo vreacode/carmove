@@ -12,15 +12,17 @@
 
 ## 当前状态
 
-系统已经有稳定演示版 Dashboard，当前重点是实机稳定性收口，而不是继续大改前端：
+系统已经有稳定演示版 Dashboard，并开始把室内二维链路和室外三维链路分离：
 
-1. 建图/导航 readiness 检查和 CPU 降载；
+1. 室内保留 slam_toolbox + Nav2，室外新增 XT-16 + Yesense + FAST-LIO2 三维建图；
 2. 阿克曼底盘前进左转、前进右转和急停的架空安全验证；
 3. 真实模型、视频和传感器链路的可重复测试；
-4. 将每次联调结果沉淀为测试记录和版本提交。
+4. 外场完成轨迹、外参和闭环误差测试后，再接入室外障碍投影和全局重定位；
+5. 将每次联调结果沉淀为测试记录和版本提交。
 
 完整盘点见 docs/00-system-inventory.md，后续路线见 docs/02-roadmap-from-spec.md。
 当前 Sprint 见 docs/05-first-sprint.md。
+室外建图与导航路线见 docs/11-outdoor-mapping-navigation.md。
 
 ## 安全与仓库边界
 

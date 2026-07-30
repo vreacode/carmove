@@ -16,6 +16,7 @@ import {
   PhotoIcon,
   PlayCircleIcon,
   StopCircleIcon,
+  TrashIcon,
   WifiIcon,
 } from "@heroicons/react/24/outline";
 import { VideoStream } from "./components/VideoStream";
@@ -63,6 +64,11 @@ function formatCaptureTime(timestamp?: string | null) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   return date.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function timestampCaptureName(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `capture_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
 function isTransientCaptureWarning(message?: string | null) {
@@ -241,11 +247,12 @@ export default function MobileCaptureConsole() {
   const [videoState, setVideoState] = useState<ConnectionState>("idle");
   const [useFallback, setUseFallback] = useState(false);
   const [streamMode, setStreamMode] = useState<CaptureMode>("visible_raw");
-  const [scene, setScene] = useState("gate_a_day");
+  const [scene, setScene] = useState(timestampCaptureName);
   const [note, setNote] = useState("园区入口，白天，垃圾和车辆");
   const [interval, setIntervalSeconds] = useState(1);
   const [durationMinutes, setDurationMinutes] = useState(3);
   const [pending, setPending] = useState<"start" | "stop" | "snapshot" | "refresh" | "">("");
+  const [deletingGroup, setDeletingGroup] = useState("");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [cruiseSpeed, setCruiseSpeed] = useState<(typeof cruiseSpeeds)[number]>("low");
@@ -412,6 +419,21 @@ export default function MobileCaptureConsole() {
     }
   }
 
+  async function deleteGallery(group: string) {
+    try {
+      setDeletingGroup(group);
+      setError("");
+      await apiFetch(`/api/capture/gallery/${encodeURIComponent(group)}`, token, { method: "DELETE" });
+      setGallery((items) => items.filter((item) => item.group !== group));
+      if (selectedGallery?.group === group) closeGallery();
+      setToast("采集记录已删除");
+    } catch (err) {
+      setError(explainMobileError(err));
+    } finally {
+      setDeletingGroup("");
+    }
+  }
+
   function closeGallery() {
     setSelectedGallery(null);
     setGalleryFrames([]);
@@ -528,11 +550,13 @@ export default function MobileCaptureConsole() {
     setPending("start");
     setError("");
     try {
+      const generatedScene = timestampCaptureName();
+      setScene(generatedScene);
       const payload = await apiFetch<CaptureStatus>("/api/capture/start", token, {
         method: "POST",
         body: JSON.stringify({
           stream_mode: streamMode,
-          scene,
+          scene: generatedScene,
           note,
           interval_seconds: interval,
           duration_seconds: durationMinutes * 60,
@@ -640,7 +664,7 @@ export default function MobileCaptureConsole() {
               </button>
             </div>
             <div className="mobile-form-grid">
-              <label className="mobile-field mobile-field-wide"><span><MapPinIcon />场景名称</span><input value={scene} onChange={(event) => setScene(event.target.value)} disabled={!!capture?.running} placeholder="例如 gate_a_day" /></label>
+              <label className="mobile-field mobile-field-wide"><span><MapPinIcon />数据集名称 · 启动时自动生成</span><input value={scene} readOnly aria-readonly="true" /></label>
               <label className="mobile-field mobile-field-wide"><span><ArchiveBoxIcon />现场备注</span><input value={note} onChange={(event) => setNote(event.target.value)} disabled={!!capture?.running} placeholder="光照、路线、目标说明" /></label>
               <label className="mobile-field"><span><ClockIcon />间隔</span><select value={interval} onChange={(event) => setIntervalSeconds(Number(event.target.value))} disabled={!!capture?.running}><option value={0.5}>0.5 秒</option><option value={1}>1 秒</option><option value={2}>2 秒</option><option value={5}>5 秒</option></select></label>
               <label className="mobile-field"><span><ChartBarIcon />时长</span><select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} disabled={!!capture?.running}><option value={1}>1 分钟</option><option value={3}>3 分钟</option><option value={5}>5 分钟</option><option value={10}>10 分钟</option></select></label>
@@ -703,7 +727,7 @@ export default function MobileCaptureConsole() {
             <div className="mobile-archive-stats"><Metric label="已保存" value={`${capture?.frames_saved ?? 0} 帧`} /><Metric label="采样间隔" value={`${capture?.interval_seconds ?? "--"} 秒`} /><Metric label="状态" value={capture?.running ? "进行中" : "已停止"} tone={capture?.running ? "good" : "neutral"} /></div>
             <section className="mobile-history-card">
               <div className="mobile-section-heading"><div><span className="mobile-eyebrow">CAPTURE HISTORY</span><h2>历史采集段</h2></div><strong>{gallery.length}</strong></div>
-              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <button className="mobile-history-item" type="button" key={item.group} onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button>)}</div> : <div className="mobile-history-empty">还没有找到已完成的 manifest。</div>}
+              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <div className="mobile-history-item" key={item.group}><button className="mobile-history-open" type="button" onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button><button className="mobile-history-delete" type="button" aria-label={`删除 ${item.scene}`} onClick={() => void deleteGallery(item.group)} disabled={deletingGroup !== "" || (!!capture?.running && capture.manifest_path?.endsWith(`${item.group}.csv`) === true)}><TrashIcon /></button></div>)}</div> : <div className="mobile-history-empty">还没有找到已完成的 manifest。</div>}
             </section>
           </>}
           {capture?.last_error && !isTransientCaptureWarning(capture.last_error) ? <div className="mobile-inline-error"><ExclamationTriangleIcon />{capture.last_error}</div> : null}

@@ -22,7 +22,7 @@
 需要重点观察：
 
 - /wheeltec_robot 是否存在；
-- /odom、/c16/lslidar_point_cloud、/imu/data_raw、/imu/data 是否存在；
+- /odom、/lidar_points、/imu/data_raw、/imu/data 是否存在；
 - /cmd_vel_nav 是否存在但仍保持 dry-run/locked；
 - /scan 和 /map 是否在建图或导航阶段出现；
 - 雷达和 IMU 的 topic rate 是否稳定；

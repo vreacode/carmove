@@ -7,12 +7,14 @@ source "${SCRIPT_DIR}/common.sh"
 cd "${REPO_ROOT}"
 AUTH_TOKEN="$(env_value AUTH_TOKEN)"
 BOARD_HOST="$(env_value BOARD_HOST)"
+LIDAR_TOPIC="$(env_value LIDAR_POINT_TOPIC)"
+HESAI_CONFIG="$(env_value HESAI_LIDAR_CONFIG)"
 
 log "demo stack startup begin"
 bash "${SCRIPT_DIR}/stop_demo_stack.sh" >/dev/null 2>&1 || true
 
-start_component "lidar_driver" "source /home/nvidia/fastlio2_ws/install/setup.bash && ros2 run lslidar_driver lslidar_c16driver_node --ros-args -r __ns:=/c16 -r __node:=lslidar_driver_node --params-file /home/nvidia/fastlio2_ws/install/lslidar_driver/share/lslidar_driver/params/lslidar_c16.yaml"
-wait_for_command "lidar topic" "source /home/nvidia/fastlio2_ws/install/setup.bash && source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ROS2CLI_NO_DAEMON=1 ros2 topic info /c16/lslidar_point_cloud -v | grep -E 'Publisher count: [1-9]'"
+start_component "lidar_driver" "LIDAR_POINT_TOPIC='${LIDAR_TOPIC}' HESAI_LIDAR_CONFIG='${HESAI_CONFIG}' bash ${REPO_ROOT}/scripts/ensure_lidar_hesai_xt16.sh"
+wait_for_command "lidar topic" "source /opt/ros/humble/setup.bash && source /home/nvidia/ros2_ws/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info ${LIDAR_TOPIC} -v | grep -E 'Publisher count: [1-9]'"
 
 start_component "imu_driver" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ros2 launch yesense_std_ros2 yesense_node.launch.py"
 wait_for_command "imu raw topic" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ROS2CLI_NO_DAEMON=1 ros2 topic info /imu/data_raw -v | grep -E 'Publisher count: [1-9]'"

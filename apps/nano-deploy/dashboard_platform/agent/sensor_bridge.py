@@ -20,7 +20,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 def parse_args():
     parser = argparse.ArgumentParser(description="ROS2 sensor bridge for lidar + IMU")
-    parser.add_argument("--lidar-topic", default="/c16/lslidar_point_cloud")
+    parser.add_argument("--lidar-topic", default="/lidar_points")
     parser.add_argument("--imu-topic", default="/imu/data")
     parser.add_argument("--max-points", type=int, default=1500)
     parser.add_argument("--send-hz", type=float, default=5.0)

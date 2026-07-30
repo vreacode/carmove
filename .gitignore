@@ -53,6 +53,12 @@ logs/
 *.7z
 *.tmp
 *.swp
+*.bak
+
+# Generated diagnostics and local reference books/manuals
+/diagnostics/
+/前端书籍/
+/ZT6迷你双光吊舱用户手册 v1.1.pdf
 
 # IDE / local workspace files
 .idea/

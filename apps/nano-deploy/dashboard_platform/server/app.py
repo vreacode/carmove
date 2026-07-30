@@ -439,6 +439,21 @@ async def api_map_metadata(map_name: str, _: str = Depends(require_token)) -> di
     return await bridge.fetch_json("GET", f"/maps/{map_name}")
 
 
+@app.delete("/api/maps/{map_name}")
+async def api_map_delete(map_name: str, _: str = Depends(require_token)) -> dict:
+    try:
+        result = await bridge.fetch_json("DELETE", f"/maps/{map_name}")
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "map delete failed"
+        try:
+            detail = exc.response.json().get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+    await hub.broadcast_log(hub.log("control", "info", f"deleted map '{map_name}'"))
+    return result
+
+
 @app.get("/api/maps/{map_name}/pgm")
 async def api_map_image(map_name: str, authorization: str | None = Header(default=None), token: str | None = Query(default=None)) -> StreamingResponse:
     header_token = _extract_token(authorization)
@@ -506,6 +521,19 @@ async def api_capture_gallery_latest(
 @app.get("/api/capture/gallery/{group}/frames")
 async def api_capture_gallery_frames(group: str, _: str = Depends(require_token)) -> dict:
     return {"items": await bridge.fetch_json("GET", f"/capture/gallery/{group}/frames")}
+
+
+@app.delete("/api/capture/gallery/{group}")
+async def api_capture_gallery_delete(group: str, _: str = Depends(require_token)) -> dict:
+    try:
+        return await bridge.fetch_json("DELETE", f"/capture/gallery/{group}")
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text or "capture delete failed"
+        try:
+            detail = exc.response.json().get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
 
 
 @app.get("/api/capture/gallery/{group}/frames/{frame_name}")
