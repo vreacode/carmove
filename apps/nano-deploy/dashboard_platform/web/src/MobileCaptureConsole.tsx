@@ -20,6 +20,7 @@ import {
   WifiIcon,
 } from "@heroicons/react/24/outline";
 import { VideoStream } from "./components/VideoStream";
+import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
 import { API_BASE, apiFetch, clearToken, loadToken, saveToken, wsUrl } from "./lib";
 import type { CaptureFrameItem, CaptureGalleryItem, CaptureStatus, ConnectionState, SiyiCameraStatus, SystemStatus } from "./types";
 
@@ -36,6 +37,8 @@ function explainMobileError(error: unknown) {
   if (message.includes("capture script not found")) return "采集脚本未部署到板端。";
   if (message.includes("source is not configured")) return "当前视频源未配置。";
   if (message.includes("capture storage is low")) return "剩余磁盘空间不足 5 GB，请先清理数据。";
+  if (message.includes("capture storage fell below safety reserve")) return "采集中剩余空间已低于安全线，任务已自动收尾，请先清理数据。";
+  if (message.includes("capture storage check failed")) return "采集中无法读取磁盘状态，任务已安全停止，请检查存储设备。";
   if (message.includes("capture storage is unavailable")) return "无法读取采集磁盘，请检查存储设备。";
   if (message.includes("did not produce a valid frame")) return "视频首帧验证失败，请检查相机链路后重试。";
   if (message.includes("Unable to open video source")) return "无法打开视频流，请检查相机和网线。";
@@ -289,16 +292,20 @@ export default function MobileCaptureConsole() {
     ? `${API_BASE}/api/capture/latest?token=${encodeURIComponent(token)}&v=${capture.frames_saved}`
     : "";
 
+  useReconnectingWebSocket({
+    enabled: !!token,
+    url: wsUrl("/ws/status", token),
+    onMessage: (event) => setStatus(JSON.parse(event.data) as SystemStatus),
+    onDisconnect: () => {
+      setStatus((previous) => previous
+        ? { ...previous, agent_online: false, board_online: false }
+        : previous);
+    },
+  });
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    const socket = new WebSocket(wsUrl("/ws/status", token));
-    socket.onmessage = (event) => {
-      if (!cancelled) setStatus(JSON.parse(event.data) as SystemStatus);
-    };
-    socket.onclose = () => {
-      if (!cancelled) setStatus((previous) => previous ? { ...previous, agent_online: false } : previous);
-    };
     void apiFetch<SystemStatus>("/api/system/status", token).then((payload) => {
       if (!cancelled) setStatus(payload);
     }).catch((err) => {
@@ -306,7 +313,6 @@ export default function MobileCaptureConsole() {
     });
     return () => {
       cancelled = true;
-      socket.close();
     };
   }, [token]);
 
@@ -740,10 +746,10 @@ export default function MobileCaptureConsole() {
               </div>
               <div className="mobile-viewer-controls">
                 <button type="button" onClick={() => moveGalleryFrame(-1)} disabled={selectedFrameIndex <= 0 || galleryViewerLoading}><ChevronLeftIcon /><span>上一张</span></button>
-                <div><strong>{galleryFrames.length ? selectedFrameIndex + 1 : 0}</strong><span> / {galleryFrames.length}</span><small>{galleryFrames[selectedFrameIndex] ? formatCaptureTime(galleryFrames[selectedFrameIndex].captured_at) : "等待图片"}</small></div>
+                <div><strong>{galleryFrames.length ? selectedFrameIndex + 1 : 0}</strong><span> / {galleryFrames.length}</span><small>{galleryFrames[selectedFrameIndex] ? `${formatCaptureTime(galleryFrames[selectedFrameIndex].captured_at)} · ${formatCaptureSize(galleryFrames[selectedFrameIndex].size_bytes)}` : "等待图片"}</small></div>
                 <button type="button" onClick={() => moveGalleryFrame(1)} disabled={selectedFrameIndex >= galleryFrames.length - 1 || galleryViewerLoading}><span>下一张</span><ChevronRightIcon /></button>
               </div>
-              <div className="mobile-viewer-note"><span>{selectedGallery.frames_saved} 张 · {selectedGallery.manifest_name}</span><p>{selectedGallery.note || "没有备注"}</p><small>左右滑动或使用下方按钮切换图片</small></div>
+              <div className="mobile-viewer-note"><span>{selectedGallery.frames_saved} 张 · {formatCaptureSize(selectedGallery.total_size_bytes)} · {selectedGallery.manifest_name}</span><p>{selectedGallery.note || "没有备注"}</p><small>{selectedGallery.integrity_ok ? "完整性检查通过 · 左右滑动切换图片" : `完整性异常：manifest 中有 ${selectedGallery.missing_frames} 张文件缺失`}</small></div>
             </section>
           ) : <>
             <section className="mobile-archive-hero"><span className="mobile-eyebrow">LATEST CAPTURE</span><h2>{capture?.scene || "还没有采集任务"}</h2><p>{capture?.manifest_path || "开始一段采集后，这里会显示 manifest 和最近一帧。"}</p></section>
@@ -751,7 +757,7 @@ export default function MobileCaptureConsole() {
             <div className="mobile-archive-stats"><Metric label="已保存" value={`${capture?.frames_saved ?? 0} 帧`} /><Metric label="采样间隔" value={`${capture?.interval_seconds ?? "--"} 秒`} /><Metric label="状态" value={capture?.running ? "进行中" : "已停止"} tone={capture?.running ? "good" : "neutral"} /></div>
             <section className="mobile-history-card">
               <div className="mobile-section-heading"><div><span className="mobile-eyebrow">CAPTURE HISTORY</span><h2>历史采集段</h2></div><strong>{gallery.length}</strong></div>
-              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <div className="mobile-history-item" key={item.group}><button className="mobile-history-open" type="button" onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button><button className="mobile-history-delete" type="button" aria-label={`删除 ${item.scene}`} onClick={() => void deleteGallery(item.group)} disabled={deletingGroup !== "" || (!!capture?.running && capture.manifest_path?.endsWith(`${item.group}.csv`) === true)}><TrashIcon /></button></div>)}</div> : <div className="mobile-history-empty">还没有找到已完成的 manifest。</div>}
+              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <div className="mobile-history-item" key={item.group}><button className="mobile-history-open" type="button" onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧 · {formatCaptureSize(item.total_size_bytes)}</span><span className={item.integrity_ok ? "is-ok" : "is-alert"}>{item.integrity_ok ? "完整" : `缺 ${item.missing_frames} 张`}</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button><button className="mobile-history-delete" type="button" aria-label={`删除 ${item.scene}`} onClick={() => void deleteGallery(item.group)} disabled={deletingGroup !== "" || (!!capture?.running && capture.manifest_path?.endsWith(`${item.group}.csv`) === true)}><TrashIcon /></button></div>)}</div> : <div className="mobile-history-empty">还没有找到已完成的 manifest。</div>}
             </section>
           </>}
           {capture?.last_error && !isTransientCaptureWarning(capture.last_error) ? <div className="mobile-inline-error"><ExclamationTriangleIcon />{capture.last_error}</div> : null}

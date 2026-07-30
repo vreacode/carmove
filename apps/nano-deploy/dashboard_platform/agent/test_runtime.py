@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .config import AgentSettings
 from .logs import LogBuffer
-from .runtime import MapManager, ModelProcessManager, StatusCollector
+from .runtime import BaseBringupManager, MapManager, ModelProcessManager, StatusCollector
 from .schemas import ModelStartRequest
 
 
@@ -29,6 +29,15 @@ class ModelPreflightTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "not available locally"):
                 asyncio.run(manager.start(ModelStartRequest(model_id="test")))
             self.assertIsNone(manager.process)
+
+
+class RosCliIsolationTests(unittest.TestCase):
+    def test_base_status_probes_never_spawn_ros2_daemon(self):
+        self.assertEqual(BaseBringupManager._node_list_command(), "ros2 node list --no-daemon")
+        self.assertEqual(
+            BaseBringupManager._topic_info_command("/cmd vel"),
+            "ros2 topic info '/cmd vel' -v --no-daemon",
+        )
 
 
 class MapManagerTests(unittest.TestCase):

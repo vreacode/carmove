@@ -10,17 +10,20 @@
 - CPU、内存、GPU、相机、雷达、IMU、云台和运动安全状态监控
 - 底盘 `PowerVoltage` 电压、充电标记和可选电量百分比监控
 - 最近一帧和 manifest 路径查看
-- 历史采集段列表，按最新采集时间排序，并显示每段的代表帧、帧数、来源和备注
+- 历史采集段列表，按最新采集时间排序，并显示每段的代表帧、可读帧数、数据大小、完整性、来源和备注
+- Tailscale 或 Dashboard 短暂断线后的 WebSocket 自动重连，无需手动刷新页面
 
 采集数据由板端 Agent 启动 `tools/collect_rtsp_frames.py`，默认落在：
 
 ```text
 /home/nvidia/carmove/datasets/local/roadside_v1/
-├── images/<scene>_<YYYY-MM-DD>/*.jpg
-└── manifests/<scene>_<YYYY-MM-DD>.csv
+├── images/<timestamp_scene>_<session_timestamp>/*.jpg
+└── manifests/<timestamp_scene>_<session_timestamp>.csv
 ```
 
-手机“记录”页读取 `manifests/` 下的 CSV，而不是只依赖 Agent 进程内存中的当前状态。因此 Agent/Dashboard 重启后，已经完成的采集段仍然可见。每个历史条目的代表帧通过受保护的 `/api/capture/gallery/{group}/latest` 读取；接口只接受合法的采集组名，并且只返回 `CAPTURE_OUTPUT_ROOT` 内的文件。
+手机“记录”页读取 `manifests/` 下的 CSV，而不是只依赖 Agent 进程内存中的当前状态。因此 Agent/Dashboard 重启后，已经完成的采集段仍然可见。每个历史条目的代表帧通过受保护的 `/api/capture/gallery/{group}/latest` 读取；接口只接受合法的采集组名，并且只返回该采集组自己的图片目录。列表会分别显示 manifest 行数、实际可读帧数、缺失帧数和总大小，避免“记录显示有图、点开却找不到”的假完整状态。
+
+采集开始前会预热 RTSP 并验证连续完整帧；采集中每次保存前都会复查磁盘安全余量。默认余量为 5 GiB，一旦低于安全线会停止并正常收尾 manifest，而不是继续写到磁盘耗尽。
 
 ## Tailscale 拓扑
 
@@ -48,7 +51,7 @@ tailscale ip -4
 http://<Dashboard设备的Tailscale地址>:8080
 ```
 
-登录后可通过浏览器的“添加到主屏幕”安装成 PWA。第一版没有把运动控制放进手机页面；现有的 `ENABLE_MOTION_CONTROL=false`、`MOTION_CONTROL_MODE=dry_run` 和 ZT6 云台运动锁继续有效。
+登录后可通过浏览器的“添加到主屏幕”安装成 PWA。手机端提供低速匀速前进和按住转向修正；启动前会检查底盘、里程计和速度接口，断线或心跳超时会自动停车。完整手动驾驶和导航调试仍保留在桌面端/RViz。
 
 底盘源码发布的 `PowerVoltage` 是电压而不是百分比。Agent 会只读订阅 `/PowerVoltage`、`/robot_charging_flag` 和 `/robot_charging_current`。按当前底盘实测经验，默认按 `22.6V = 100%`、`20.0V = 0%` 换算；`20.0V` 是硬电压告警线，同时保留 `20%` 的提前预警，`19.5V` 是接近必定自动断电的硬件边界。电压先经过最近 5 次采样的中位数滤波，低电压状态需要连续 3 次确认，避免单次跳动影响手机显示或告警。
 
@@ -62,6 +65,11 @@ npm run build
 ```
 
 后端构建完成后，按项目原有的 systemd 服务重启 Dashboard 和 Agent，手机页面会随 Dashboard 的 `web/dist` 自动提供。部署时需要确认 Agent 的 `.env` 中 `CAPTURE_SCRIPT`、`CAPTURE_WORKDIR` 和 `CAPTURE_OUTPUT_ROOT` 指向同一台设备上可读写的位置；不要把 RTSP 用户名、密码或 token 写进采集记录页面。
+
+systemd 运行时必须保留 Uvicorn 的 `--timeout-graceful-shutdown 3` 和
+`TimeoutStopSec=30`。Agent 内的 ROS 2 CLI 查询必须显式使用
+`--no-daemon`；ROS 2 Humble 不会因为设置 `ROS2CLI_NO_DAEMON` 环境变量而
+自动禁用 daemon。
 
 ## 设计依据
 

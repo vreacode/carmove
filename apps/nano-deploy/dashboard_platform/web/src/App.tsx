@@ -21,6 +21,7 @@ import {
 import { Panel } from "./components/Panel";
 import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
 import { VideoStream } from "./components/VideoStream";
+import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
 import { API_BASE, apiFetch, classNames, clearToken, formatNumber, loadToken, saveToken, wsUrl } from "./lib";
 import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaItem, MediaStatus, NavigationState, SiyiCameraStatus, StreamStats, SystemStatus } from "./types";
 
@@ -212,50 +213,66 @@ function App() {
               ? "当前为 dry-run 模式，控制命令不会真正下发到底盘。"
               : "当前可以进行手动控制。";
 
-  useEffect(() => {
-    if (!token) return;
-    const statusSocket = new WebSocket(wsUrl("/ws/status", token));
-    const logSocket = new WebSocket(wsUrl("/ws/logs", token));
-
-    statusSocket.onmessage = (event) => {
+  useReconnectingWebSocket({
+    enabled: !!token,
+    url: wsUrl("/ws/status", token),
+    onMessage: (event) => {
       const payload = JSON.parse(event.data) as SystemStatus;
       setStatus(payload);
-      if (!source && payload.current_video_source) setSource(payload.current_video_source);
+      if (payload.current_video_source) setSource((current) => current || payload.current_video_source || "");
       if (payload.current_model) setSelectedModel(payload.current_model);
-      if (payload.current_video_mode === "visible_raw" && videoSourceMode === "annotated" && !payload.model_status?.running) {
-        setVideoSourceMode("visible_raw");
-      }
-    };
+      setVideoSourceMode((current) => (
+        payload.current_video_mode === "visible_raw" &&
+        current === "annotated" &&
+        !payload.model_status?.running
+          ? "visible_raw"
+          : current
+      ));
+    },
+    onDisconnect: () => {
+      setStatus((current) => current ? { ...current, agent_online: false, board_online: false } : current);
+      setVideoState((current) => current === "connected" ? "reconnecting" : current);
+    },
+  });
 
-    logSocket.onmessage = (event) => {
+  useReconnectingWebSocket({
+    enabled: !!token,
+    url: wsUrl("/ws/logs", token),
+    onMessage: (event) => {
       const item = JSON.parse(event.data) as LogItem;
       setLogs((prev) => [...prev.slice(-299), item]);
-    };
+    },
+  });
 
-    const onDisconnect = () => setVideoState((prev) => (prev === "connected" ? "reconnecting" : prev));
-    statusSocket.onclose = onDisconnect;
-    logSocket.onclose = onDisconnect;
-
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
     void apiFetch<SystemStatus>("/api/system/status", token)
       .then((payload) => {
+        if (cancelled) return;
         setStatus(payload);
-        if (!source && payload.current_video_source) setSource(payload.current_video_source);
+        if (payload.current_video_source) setSource((current) => current || payload.current_video_source || "");
         if (payload.current_model) setSelectedModel(payload.current_model);
-        if (!selectedMapName && payload.current_map_name) {
-          setSelectedMapName(payload.current_map_name);
-          setMapNameInput(payload.current_map_name);
+        if (payload.current_map_name) {
+          setSelectedMapName((current) => current || payload.current_map_name || "");
+          setMapNameInput((current) => current || payload.current_map_name || "");
         }
-        if (payload.current_video_mode === "visible_raw" && videoSourceMode === "annotated" && !payload.model_status?.running) {
-          setVideoSourceMode("visible_raw");
-        }
+        setVideoSourceMode((current) => (
+          payload.current_video_mode === "visible_raw" &&
+          current === "annotated" &&
+          !payload.model_status?.running
+            ? "visible_raw"
+            : current
+        ));
       })
-      .catch((err) => setError(describeError(err)));
+      .catch((err) => {
+        if (!cancelled) setError(describeError(err));
+      });
 
     return () => {
-      statusSocket.close();
-      logSocket.close();
+      cancelled = true;
     };
-  }, [token, source, videoSourceMode]);
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;

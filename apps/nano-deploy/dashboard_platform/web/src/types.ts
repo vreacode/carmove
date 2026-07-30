@@ -283,6 +283,10 @@ export type CaptureGalleryItem = {
   scene: string;
   stream_mode: "visible_raw" | "ir_raw" | "unknown";
   frames_saved: number;
+  manifest_frames: number;
+  missing_frames: number;
+  total_size_bytes: number;
+  integrity_ok: boolean;
   first_captured_at?: string | null;
   last_captured_at?: string | null;
   note?: string;
@@ -294,4 +298,5 @@ export type CaptureFrameItem = {
   name: string;
   captured_at?: string | null;
   stream_mode: "visible_raw" | "ir_raw" | "unknown";
+  size_bytes: number;
 };

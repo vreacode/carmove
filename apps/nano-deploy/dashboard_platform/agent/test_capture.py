@@ -53,6 +53,10 @@ class CaptureGalleryTests(unittest.TestCase):
             self.assertEqual([item.group for item in items], ["road_2026-07-21", "gate_2026-07-20"])
             self.assertEqual(items[0].stream_mode, "ir_raw")
             self.assertEqual(items[0].frames_saved, 1)
+            self.assertEqual(items[0].manifest_frames, 1)
+            self.assertEqual(items[0].missing_frames, 0)
+            self.assertTrue(items[0].integrity_ok)
+            self.assertEqual(items[0].total_size_bytes, len(b"fixture"))
             self.assertEqual(items[0].latest_frame_name, "first.jpg")
             self.assertEqual(items[1].scene, "gate_a_day")
             self.assertEqual(items[1].frames_saved, 2)
@@ -60,11 +64,39 @@ class CaptureGalleryTests(unittest.TestCase):
             manager = CaptureManager(settings, LogBuffer(20))
             self.assertEqual(manager.gallery_latest_frame_path("gate_2026-07-20"), second_frame.resolve())
             self.assertEqual([frame.name for frame in manager.gallery_frames("gate_2026-07-20")], ["first.jpg", "second.jpg"])
+            self.assertEqual(manager.gallery_frames("gate_2026-07-20")[0].size_bytes, len(b"fixture"))
             self.assertEqual(manager.gallery_frame_path("gate_2026-07-20", "second.jpg"), second_frame.resolve())
             with self.assertRaises(ValueError):
                 manager.gallery_latest_frame_path("../outside")
             with self.assertRaises(ValueError):
                 manager.gallery_frame_path("gate_2026-07-20", "../outside.jpg")
+
+    def test_reports_missing_or_cross_group_manifest_frames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            other_group_frame = root / "images" / "other_group" / "frame.jpg"
+            other_group_frame.parent.mkdir(parents=True)
+            other_group_frame.write_bytes(b"must-not-leak")
+            missing_frame = root / "images" / "field_group" / "missing.jpg"
+            self.write_manifest(
+                root,
+                "field_group.csv",
+                [
+                    [str(other_group_frame), "2026-07-30T11:00:00+08:00", "field_group", "rtsp://camera/video1", ""],
+                    [str(missing_frame), "2026-07-30T11:00:01+08:00", "field_group", "rtsp://camera/video1", ""],
+                ],
+            )
+            manager = CaptureManager(AgentSettings(_env_file=None, capture_output_root=root), LogBuffer(20))
+
+            item = manager.list_gallery()[0]
+
+            self.assertEqual(item.manifest_frames, 2)
+            self.assertEqual(item.frames_saved, 0)
+            self.assertEqual(item.missing_frames, 2)
+            self.assertFalse(item.integrity_ok)
+            self.assertIsNone(item.latest_frame_name)
+            self.assertEqual(manager.gallery_frames("field_group"), [])
+            self.assertIsNone(manager.gallery_frame_path("field_group", "frame.jpg"))
 
     def test_paginates_and_skips_empty_manifests(self):
         with tempfile.TemporaryDirectory() as directory:

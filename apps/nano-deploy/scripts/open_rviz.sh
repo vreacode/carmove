@@ -16,7 +16,7 @@ set -u
 # switch automatically to a sensor-only view so the XT-16 cloud is visible.
 has_pub() {
   local topic="$1"
-  ROS2CLI_NO_DAEMON=1 ros2 topic info "${topic}" -v 2>/dev/null | grep -Eq 'Publisher count: [1-9][0-9]*'
+  ros2 topic info "${topic}" -v --no-daemon 2>/dev/null | grep -Eq 'Publisher count: [1-9][0-9]*'
 }
 
 if [[ "${MODE}" == "mapping" ]]; then

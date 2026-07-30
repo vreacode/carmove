@@ -9,9 +9,10 @@ User=nvidia
 WorkingDirectory=/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
 EnvironmentFile=/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/.env
 Environment=PYTHONNOUSERSITE=1
-ExecStart=/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/.venv/bin/uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001
+ExecStart=/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy/.venv/bin/uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001 --timeout-graceful-shutdown 3
 Restart=always
 RestartSec=3
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

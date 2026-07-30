@@ -87,9 +87,9 @@ run_cmd "mapping_rviz" \
    bash ${ROOT_DIR}/scripts/open_rviz.sh mapping"
 
 "${LIDAR_SCRIPT}" start
-wait_for_ready "wheeltec_robot" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 node list | grep -q '^/wheeltec_robot$'" 12
-wait_for_ready "/odom" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /odom -v | grep -q 'Publisher count: 1'" 12
-wait_for_ready "${LIDAR_TOPIC}" "source /opt/ros/humble/setup.bash && source /home/nvidia/ros2_ws/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info ${LIDAR_TOPIC} -v | grep -q 'Publisher count: [1-9]'" 25
+wait_for_ready "wheeltec_robot" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ros2 node list --no-daemon | grep -q '^/wheeltec_robot$'" 12
+wait_for_ready "/odom" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ros2 topic info /odom -v --no-daemon | grep -q 'Publisher count: 1'" 12
+wait_for_ready "${LIDAR_TOPIC}" "source /opt/ros/humble/setup.bash && source /home/nvidia/ros2_ws/install/setup.bash && ros2 topic info ${LIDAR_TOPIC} -v --no-daemon | grep -q 'Publisher count: [1-9]'" 25
 
 sed 's/^    map_file_name:.*$/    map_file_name: ""/' "${SLAM_TOOLBOX_CONFIG}" > "${RUNTIME_SLAM_CONFIG}"
 
@@ -109,7 +109,7 @@ run_cmd "mapping_pcl2scan" \
      -p range_max:=30.0 \
      -p scan_time:=0.1"
 
-wait_for_ready "/scan" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info /scan -v | grep -q 'Publisher count: 1'" 25
+wait_for_ready "/scan" "source /opt/ros/humble/setup.bash && source /home/nvidia/Desktop/wheeltec_ros2/install/setup.bash && ros2 topic info /scan -v --no-daemon | grep -q 'Publisher count: 1'" 25
 
 run_cmd "slam_toolbox_integrated" \
   "source /opt/ros/humble/setup.bash && \

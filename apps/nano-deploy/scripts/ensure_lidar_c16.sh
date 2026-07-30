@@ -19,7 +19,7 @@ topic_ready() {
   # may close the pipe as soon as it sees the publisher count, making ros2
   # exit with SIGPIPE and causing a false negative.
   local topic_info
-  topic_info="$(ROS2CLI_NO_DAEMON=1 ros2 topic info "${TOPIC}" -v 2>/dev/null || true)"
+  topic_info="$(ros2 topic info "${TOPIC}" -v --no-daemon 2>/dev/null || true)"
   grep -q 'Publisher count: [1-9]' <<<"${topic_info}"
 }
 

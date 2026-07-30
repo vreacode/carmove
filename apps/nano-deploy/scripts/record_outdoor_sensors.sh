@@ -43,7 +43,7 @@ topic_has_publisher() {
   local output
   output="$(
     ros_env
-    ROS2CLI_NO_DAEMON=1 ros2 topic info "${topic}" -v 2>/dev/null || true
+    ros2 topic info "${topic}" -v --no-daemon 2>/dev/null || true
   )"
   grep -Eq 'Publisher count: [1-9][0-9]*' <<<"${output}"
 }
@@ -323,7 +323,7 @@ PHASE="validating"
 write_state
 STREAM_REPORT="$(
   ros_env
-  ROS2CLI_NO_DAEMON=1 python3 "${STREAM_CHECK_SCRIPT}" \
+  python3 "${STREAM_CHECK_SCRIPT}" \
     --lidar-topic /lidar_points \
     --imu-topic /imu/data_raw \
     --sample-seconds 4.0 \

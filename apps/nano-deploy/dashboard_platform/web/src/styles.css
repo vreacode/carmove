@@ -268,7 +268,16 @@ select {
 }
 
 .mobile-history-meta {
+  flex-wrap: wrap;
   margin-top: 7px;
+}
+
+.mobile-history-meta .is-ok {
+  color: var(--mobile-acid);
+}
+
+.mobile-history-meta .is-alert {
+  color: #fb7185;
 }
 
 .mobile-history-item p {

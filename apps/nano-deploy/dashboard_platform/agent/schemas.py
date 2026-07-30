@@ -143,6 +143,10 @@ class CaptureGalleryItem(BaseModel):
     scene: str
     stream_mode: Literal["visible_raw", "ir_raw", "unknown"] = "unknown"
     frames_saved: int = 0
+    manifest_frames: int = 0
+    missing_frames: int = 0
+    total_size_bytes: int = 0
+    integrity_ok: bool = True
     first_captured_at: str | None = None
     last_captured_at: str | None = None
     note: str = ""
@@ -154,6 +158,7 @@ class CaptureFrameItem(BaseModel):
     name: str
     captured_at: str | None = None
     stream_mode: Literal["visible_raw", "ir_raw", "unknown"] = "unknown"
+    size_bytes: int = 0
 
 
 class BatteryStatus(BaseModel):

@@ -71,8 +71,11 @@ Low latency comes from WebRTC. The browser does **not** pull RTSP directly. The 
 - Workflow panels for mapping, map saving, navigation, and RViz launch through the Agent whitelist.
 - Independent outdoor 3D mode with XT-16 per-point timestamps, Yesense IMU, selectable GLIM/FAST-LIO2 backends, neutral A/B rosbag recording, RViz, and timestamp-named outputs.
 - Field capture readiness gates: RTSP warm-up with consecutive-frame validation,
-  atomic JPEG/manifest writes, free-space protection, and live XT-16/IMU
-  validation before rosbag is reported as recording.
+  atomic JPEG/manifest writes, continuous free-space protection, archive
+  integrity reporting, and live XT-16/IMU validation before rosbag is reported
+  as recording.
+- Browser WebSockets reconnect automatically after temporary Dashboard or
+  Tailscale interruptions.
 - Online 2D map viewer that reads saved `yaml + pgm` maps from the configured maps directory.
 - Status cards for Agent availability, video source, model, CPU, memory, GPU, and heartbeat.
 
@@ -232,7 +235,7 @@ If you want strict environment isolation, keep `PYTHONNOUSERSITE=1` in the syste
 ```bash
 cd /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
 source .venv/bin/activate
-uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001
+uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001 --timeout-graceful-shutdown 3
 ```
 
 ### 3. Run the server
@@ -242,7 +245,7 @@ You can reuse the same Python environment:
 ```bash
 cd /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
 source .venv/bin/activate
-uvicorn dashboard_platform.server.app:app --host 0.0.0.0 --port 8080
+uvicorn dashboard_platform.server.app:app --host 0.0.0.0 --port 8080 --timeout-graceful-shutdown 3
 ```
 
 ### 4. Run the frontend in development mode

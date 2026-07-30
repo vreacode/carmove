@@ -14,18 +14,18 @@ log "demo stack startup begin"
 bash "${SCRIPT_DIR}/stop_demo_stack.sh" >/dev/null 2>&1 || true
 
 start_component "lidar_driver" "LIDAR_POINT_TOPIC='${LIDAR_TOPIC}' HESAI_LIDAR_CONFIG='${HESAI_CONFIG}' bash ${REPO_ROOT}/scripts/ensure_lidar_hesai_xt16.sh"
-wait_for_command "lidar topic" "source /opt/ros/humble/setup.bash && source /home/nvidia/ros2_ws/install/setup.bash && ROS2CLI_NO_DAEMON=1 ros2 topic info ${LIDAR_TOPIC} -v | grep -E 'Publisher count: [1-9]'"
+wait_for_command "lidar topic" "source /opt/ros/humble/setup.bash && source /home/nvidia/ros2_ws/install/setup.bash && ros2 topic info ${LIDAR_TOPIC} -v --no-daemon | grep -E 'Publisher count: [1-9]'"
 
 start_component "imu_driver" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ros2 launch yesense_std_ros2 yesense_node.launch.py"
-wait_for_command "imu raw topic" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ROS2CLI_NO_DAEMON=1 ros2 topic info /imu/data_raw -v | grep -E 'Publisher count: [1-9]'"
+wait_for_command "imu raw topic" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ros2 topic info /imu/data_raw -v --no-daemon | grep -E 'Publisher count: [1-9]'"
 
 start_component "imu_republisher" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && python3 ${REPO_ROOT}/dashboard_platform/agent/imu_republisher.py --source-topic /imu/data_raw --target-topic /imu/data"
-wait_for_command "imu standard topic" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ROS2CLI_NO_DAEMON=1 ros2 topic info /imu/data -v | grep -E 'Publisher count: [1-9]'"
+wait_for_command "imu standard topic" "source /home/nvidia/serial-ros2/install/setup.bash && source \"/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash\" && ros2 topic info /imu/data -v --no-daemon | grep -E 'Publisher count: [1-9]'"
 
-start_component "agent" "cd ${REPO_ROOT} && PYTHONNOUSERSITE=1 ${REPO_ROOT}/.venv/bin/uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001"
+start_component "agent" "cd ${REPO_ROOT} && PYTHONNOUSERSITE=1 ${REPO_ROOT}/.venv/bin/uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001 --timeout-graceful-shutdown 3"
 wait_for_http "http://127.0.0.1:9001/health" "agent"
 
-start_component "server" "cd ${REPO_ROOT} && PYTHONNOUSERSITE=1 ${REPO_ROOT}/.venv/bin/uvicorn dashboard_platform.server.app:app --host 0.0.0.0 --port 8080"
+start_component "server" "cd ${REPO_ROOT} && PYTHONNOUSERSITE=1 ${REPO_ROOT}/.venv/bin/uvicorn dashboard_platform.server.app:app --host 0.0.0.0 --port 8080 --timeout-graceful-shutdown 3"
 wait_for_http "http://127.0.0.1:8080/health" "server status api"
 
 log "demo stack startup complete"

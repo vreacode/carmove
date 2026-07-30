@@ -16,7 +16,6 @@ METRICS_RUNNER="${ROOT_DIR}/scripts/run_with_metrics.py"
 BENCHMARK_ROOT="${OUTDOOR_BENCHMARK_DIR:-/home/nvidia/Desktop/wheeltec_ros2/benchmarks/outdoor}"
 ROS_DOMAIN_ID="${OUTDOOR_BENCHMARK_ROS_DOMAIN_ID:-77}"
 export ROS_DOMAIN_ID
-export ROS2CLI_NO_DAEMON=1
 
 declare -a FASTLIO_PIDS=()
 

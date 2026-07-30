@@ -16,8 +16,6 @@ for setup_file in \
 done
 set -u
 
-export ROS2CLI_NO_DAEMON=1
-
 capture() {
   local name="$1"
   shift
@@ -38,13 +36,13 @@ capture_shell() {
   } >"${OUTPUT_DIR}/${name}.txt" 2>&1 || true
 }
 
-capture nodes ros2 node list &
-capture topics ros2 topic list -t &
-capture map_info ros2 topic info /map -v &
+capture nodes ros2 node list --no-daemon &
+capture topics ros2 topic list -t --no-daemon &
+capture map_info ros2 topic info /map -v --no-daemon &
 capture map_header ros2 topic echo /map --once --field header &
 capture map_metadata ros2 topic echo /map --once --field info &
-capture tf_publishers ros2 topic info /tf -v &
-capture tf_static_publishers ros2 topic info /tf_static -v &
+capture tf_publishers ros2 topic info /tf -v --no-daemon &
+capture tf_static_publishers ros2 topic info /tf_static -v --no-daemon &
 wait
 
 topic_for_type() {
@@ -65,7 +63,7 @@ for entry in "scan:${SCAN_TOPIC}" "odom:${ODOM_TOPIC}" "imu:${IMU_TOPIC}"; do
   label="${entry%%:*}"
   topic="${entry#*:}"
   [[ -n "${topic}" ]] || continue
-  capture "${label}_info" ros2 topic info "${topic}" -v &
+  capture "${label}_info" ros2 topic info "${topic}" -v --no-daemon &
   capture "${label}_header" ros2 topic echo "${topic}" --once --field header &
 done
 wait

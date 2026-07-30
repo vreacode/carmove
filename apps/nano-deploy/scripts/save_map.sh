@@ -13,7 +13,7 @@ mkdir -p "${MAPS_DIRECTORY}"
 
 topic_has_publisher() {
   local info
-  info="$(ROS2CLI_NO_DAEMON=1 ros2 topic info "${MAP_TOPIC}" -v 2>/dev/null || true)"
+  info="$(ros2 topic info "${MAP_TOPIC}" -v --no-daemon 2>/dev/null || true)"
   [[ "${info}" =~ Publisher\ count:\ ([1-9][0-9]*) ]]
 }
 
@@ -27,11 +27,11 @@ done
 
 if ! topic_has_publisher; then
   echo "save_map failed: ${MAP_TOPIC} is not ready" >&2
-  ROS2CLI_NO_DAEMON=1 ros2 topic info "${MAP_TOPIC}" -v || true
+  ros2 topic info "${MAP_TOPIC}" -v --no-daemon || true
   exit 1
 fi
 
-PYTHONNOUSERSITE=1 ROS2CLI_NO_DAEMON=1 ros2 run nav2_map_server map_saver_cli \
+PYTHONNOUSERSITE=1 ros2 run nav2_map_server map_saver_cli \
   -f "${MAPS_DIRECTORY}/${MAP_NAME}" \
   --ros-args \
   -p map_topic:="${MAP_TOPIC}" \

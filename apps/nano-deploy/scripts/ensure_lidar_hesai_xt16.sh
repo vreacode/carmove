@@ -23,7 +23,7 @@ topic_ready() {
   topic_info="$(
     source /opt/ros/humble/setup.bash
     source "${HESAI_SETUP}"
-    ROS2CLI_NO_DAEMON=1 ros2 topic info "${TOPIC}" -v 2>/dev/null || true
+    ros2 topic info "${TOPIC}" -v --no-daemon 2>/dev/null || true
   )"
   grep -Eq 'Publisher count: [1-9][0-9]*' <<<"${topic_info}"
 }

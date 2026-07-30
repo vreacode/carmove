@@ -6,13 +6,17 @@
 
     cd /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
     source .venv/bin/activate
-    PYTHONNOUSERSITE=1 uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001
-    PYTHONNOUSERSITE=1 uvicorn dashboard_platform.server.app:app --host 0.0.0.0 --port 8080
+    PYTHONNOUSERSITE=1 uvicorn dashboard_platform.agent.app:app --host 0.0.0.0 --port 9001 --timeout-graceful-shutdown 3
+    PYTHONNOUSERSITE=1 uvicorn dashboard_platform.server.app:app --host 0.0.0.0 --port 8080 --timeout-graceful-shutdown 3
 
 推荐使用统一启动/停止脚本：
 
     bash scripts/start_demo_stack.sh
     bash scripts/stop_demo_stack.sh
+
+systemd 服务还应设置 `TimeoutStopSec=30`。Agent 发起的 `ros2 node list` 和
+`ros2 topic info` 必须带 `--no-daemon`，否则 Humble 的常驻
+`ros2-daemon` 会留在服务 cgroup 内，导致重启一直等待到超时。
 
 ## 视觉检测
 

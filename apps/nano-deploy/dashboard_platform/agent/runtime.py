@@ -7,6 +7,7 @@ import os
 import pwd
 import re
 import signal
+import shlex
 import shutil
 import subprocess
 import time
@@ -1228,7 +1229,7 @@ class BaseBringupManager:
         proc = await asyncio.create_subprocess_exec(
             "/bin/bash",
             "-lc",
-            f"source /opt/ros/humble/setup.bash && ROS2CLI_NO_DAEMON=1 timeout {self.settings.base_status_timeout_seconds}s {script}",
+            f"source /opt/ros/humble/setup.bash && timeout {self.settings.base_status_timeout_seconds}s {script}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=os.environ.copy(),
@@ -1244,6 +1245,14 @@ class BaseBringupManager:
             detail = stderr.decode("utf-8", errors="ignore").strip() or stdout.decode("utf-8", errors="ignore").strip()
             raise RuntimeError(detail or f"command failed: {script}")
         return stdout.decode("utf-8", errors="ignore")
+
+    @staticmethod
+    def _node_list_command() -> str:
+        return "ros2 node list --no-daemon"
+
+    @staticmethod
+    def _topic_info_command(topic: str) -> str:
+        return f"ros2 topic info {shlex.quote(topic)} -v --no-daemon"
 
     @staticmethod
     def _extract_count(text: str, label: str) -> int:
@@ -1262,11 +1271,11 @@ class BaseBringupManager:
             odom_online = False
             last_error: str | None = None
             try:
-                nodes = await self._run_ros_cli("ros2 node list")
+                nodes = await self._run_ros_cli(self._node_list_command())
                 wheeltec_robot_online = self.settings.base_node_name in nodes.splitlines()
-                cmd_vel_info = await self._run_ros_cli(f"ros2 topic info {self.settings.base_cmd_vel_topic} -v")
+                cmd_vel_info = await self._run_ros_cli(self._topic_info_command(self.settings.base_cmd_vel_topic))
                 cmd_vel_subscriber_online = self._extract_count(cmd_vel_info, "Subscription count") > 0
-                odom_info = await self._run_ros_cli(f"ros2 topic info {self.settings.base_odom_topic} -v")
+                odom_info = await self._run_ros_cli(self._topic_info_command(self.settings.base_odom_topic))
                 odom_online = self._extract_count(odom_info, "Publisher count") > 0
             except Exception as exc:
                 last_error = str(exc)

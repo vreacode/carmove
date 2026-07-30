@@ -97,6 +97,14 @@ class CaptureManager:
     def _is_transient_decoder_warning(line: str) -> bool:
         return bool(re.search(r"(?:hevc|h264).*Could not find ref with POC|Could not find ref with POC", line, re.IGNORECASE))
 
+    @staticmethod
+    def _manifest_frame_path(root: Path, group: str, raw_path: str) -> Path | None:
+        expected_directory = (root / "images" / group).resolve()
+        frame_path = Path(raw_path).expanduser().resolve()
+        if expected_directory not in frame_path.parents or not frame_path.is_file():
+            return None
+        return frame_path
+
     def list_gallery(self, page: int = 1, page_size: int = 20) -> list[CaptureGalleryItem]:
         """Read completed capture sessions without exposing absolute filesystem paths."""
         if page < 1 or page_size < 1:
@@ -108,6 +116,11 @@ class CaptureManager:
 
         items: list[CaptureGalleryItem] = []
         for manifest_path in sorted(manifest_root.glob("*.csv"), key=lambda path: path.stat().st_mtime, reverse=True):
+            try:
+                group = self.validate_group(manifest_path.stem)
+            except ValueError:
+                self.log_buffer.add("capture", "warning", f"skip invalid manifest name {manifest_path.name}")
+                continue
             rows: list[dict[str, str]] = []
             try:
                 with manifest_path.open("r", newline="", encoding="utf-8") as handle:
@@ -118,30 +131,42 @@ class CaptureManager:
             if not rows:
                 continue
 
-            timestamps = sorted(row.get("captured_at", "").strip() for row in rows if row.get("captured_at", "").strip())
+            timestamps: list[str] = []
             latest_frame_name: str | None = None
             latest_timestamp = ""
             stream_modes: set[str] = set()
+            valid_frames = 0
+            total_size_bytes = 0
             for row in rows:
                 source = row.get("source", "")
                 stream_modes.add(self._stream_mode(source))
-                frame_path = Path(row["frame_path"]).expanduser().resolve()
-                if root not in frame_path.parents or not frame_path.is_file():
+                frame_path = self._manifest_frame_path(root, group, row["frame_path"])
+                if frame_path is None:
                     continue
-                captured_at = row.get("captured_at", "")
+                valid_frames += 1
+                total_size_bytes += frame_path.stat().st_size
+                captured_at = row.get("captured_at", "").strip()
+                if captured_at:
+                    timestamps.append(captured_at)
                 if not latest_frame_name or captured_at >= latest_timestamp:
                     latest_frame_name = frame_path.name
                     latest_timestamp = captured_at
 
+            timestamps.sort()
+            missing_frames = len(rows) - valid_frames
             scene = next((row.get("scene", "").strip() for row in rows if row.get("scene", "").strip()), manifest_path.stem)
             modes = stream_modes - {"unknown"}
             stream_mode = next(iter(modes)) if len(modes) == 1 else "unknown"
             items.append(
                 CaptureGalleryItem(
-                    group=manifest_path.stem,
+                    group=group,
                     scene=scene,
                     stream_mode=stream_mode,
-                    frames_saved=len(rows),
+                    frames_saved=valid_frames,
+                    manifest_frames=len(rows),
+                    missing_frames=missing_frames,
+                    total_size_bytes=total_size_bytes,
+                    integrity_ok=missing_frames == 0,
                     first_captured_at=timestamps[0] if timestamps else None,
                     last_captured_at=timestamps[-1] if timestamps else None,
                     note=next((row.get("note", "").strip() for row in rows if row.get("note", "").strip()), ""),
@@ -168,8 +193,8 @@ class CaptureManager:
 
         candidates: list[tuple[str, Path]] = []
         for row in rows:
-            frame_path = Path(row["frame_path"]).expanduser().resolve()
-            if root in frame_path.parents and frame_path.is_file():
+            frame_path = self._manifest_frame_path(root, group, row["frame_path"])
+            if frame_path is not None:
                 candidates.append((row.get("captured_at", ""), frame_path))
         if not candidates:
             return None
@@ -190,14 +215,15 @@ class CaptureManager:
 
         frames: list[CaptureFrameItem] = []
         for row in rows:
-            frame_path = Path(row["frame_path"]).expanduser().resolve()
-            if root not in frame_path.parents or not frame_path.is_file():
+            frame_path = self._manifest_frame_path(root, group, row["frame_path"])
+            if frame_path is None:
                 continue
             frames.append(
                 CaptureFrameItem(
                     name=frame_path.name,
                     captured_at=row.get("captured_at", "") or None,
                     stream_mode=self._stream_mode(row.get("source", "")),
+                    size_bytes=frame_path.stat().st_size,
                 )
             )
         return frames
@@ -216,8 +242,8 @@ class CaptureManager:
         except (OSError, UnicodeError, csv.Error) as exc:
             raise RuntimeError(f"unable to read capture manifest: {manifest_path.name}") from exc
         for row in rows:
-            frame_path = Path(row["frame_path"]).expanduser().resolve()
-            if frame_path.name == frame_name and root in frame_path.parents and frame_path.is_file():
+            frame_path = self._manifest_frame_path(root, group, row["frame_path"])
+            if frame_path is not None and frame_path.name == frame_name:
                 return frame_path
         return None
 
@@ -388,6 +414,8 @@ class CaptureManager:
                 request.note,
                 "--jpeg-quality",
                 str(request.jpeg_quality),
+                "--min-free-gb",
+                str(self.settings.capture_min_free_gb),
             ]
             if request.duration_seconds:
                 command.extend(["--duration", str(request.duration_seconds)])

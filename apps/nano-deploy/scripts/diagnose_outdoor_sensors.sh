@@ -36,19 +36,19 @@ section() {
   readlink -f /dev/wheeltec_controller 2>/dev/null || echo "wheeltec_controller=missing"
 
   section "nodes"
-  ROS2CLI_NO_DAEMON=1 ros2 node list 2>&1 | sort
+  ros2 node list --no-daemon 2>&1 | sort
 
   section "topics"
-  ROS2CLI_NO_DAEMON=1 ros2 topic list -t 2>&1 | sort
+  ros2 topic list -t --no-daemon 2>&1 | sort
 
   section "lidar_info"
-  ROS2CLI_NO_DAEMON=1 ros2 topic info /lidar_points -v 2>&1
+  ros2 topic info /lidar_points -v --no-daemon 2>&1
   timeout 7 ros2 topic hz /lidar_points 2>&1 || true
   timeout 5 ros2 topic echo /lidar_points --once --field header 2>&1 || true
   timeout 5 ros2 topic echo /lidar_points --once --field fields 2>&1 || true
 
   section "imu_info"
-  ROS2CLI_NO_DAEMON=1 ros2 topic info /imu/data_raw -v 2>&1
+  ros2 topic info /imu/data_raw -v --no-daemon 2>&1
   timeout 7 ros2 topic hz /imu/data_raw 2>&1 || true
   timeout 5 ros2 topic echo /imu/data_raw --once 2>&1 || true
 
@@ -56,11 +56,11 @@ section() {
   timeout 5 ros2 topic echo /nav_all --once 2>&1 || true
 
   section "adapter_info"
-  ROS2CLI_NO_DAEMON=1 ros2 topic info /lidar_points_fastlio -v 2>&1
+  ros2 topic info /lidar_points_fastlio -v --no-daemon 2>&1
   timeout 5 ros2 topic echo /lidar_points_fastlio --once --field fields 2>&1 || true
 
   section "lio_info"
-  ROS2CLI_NO_DAEMON=1 ros2 topic info /Odometry -v 2>&1
+  ros2 topic info /Odometry -v --no-daemon 2>&1
   timeout 5 ros2 topic echo /Odometry --once 2>&1 || true
 } | tee "${REPORT}"
 

@@ -127,11 +127,17 @@ class BatteryManager:
         )
         return ["/bin/bash", "-lc", shell]
 
+    def _topic_info_command(self) -> str:
+        return (
+            "ros2 topic info "
+            f"{shlex.quote(self.settings.battery_voltage_topic)} --no-daemon"
+        )
+
     async def _has_voltage_publisher(self) -> bool:
         shell = " && ".join(
             [
                 f"source {shlex.quote(self.settings.battery_ros_setup_bash)}",
-                f"ROS2CLI_NO_DAEMON=1 timeout 4 ros2 topic info {shlex.quote(self.settings.battery_voltage_topic)}",
+                f"timeout 4 {self._topic_info_command()}",
             ]
         )
         try:

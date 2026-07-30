@@ -61,6 +61,17 @@ class BatteryConversionTests(unittest.TestCase):
         self.assertEqual(BatteryManager.percentage(21.3, 20.0, 22.6), 50.0)
         self.assertEqual(BatteryManager.percentage(26.0, 20.0, 22.6), 100.0)
 
+    def test_voltage_topic_probe_never_spawns_ros2_daemon(self):
+        manager = BatteryManager(
+            AgentSettings(_env_file=None, battery_voltage_topic="/PowerVoltage"),
+            LogBuffer(10),
+        )
+
+        self.assertEqual(
+            manager._topic_info_command(),
+            "ros2 topic info /PowerVoltage --no-daemon",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

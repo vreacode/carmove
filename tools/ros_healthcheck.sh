@@ -96,11 +96,8 @@ if ! command -v ros2 >/dev/null 2>&1; then
   exit 1
 fi
 
-ROS2CLI_NO_DAEMON=1
-export ROS2CLI_NO_DAEMON
-
-NODE_LIST="$(ros2 node list 2>/dev/null || true)"
-TOPIC_LIST="$(ros2 topic list 2>/dev/null || true)"
+NODE_LIST="$(ros2 node list --no-daemon 2>/dev/null || true)"
+TOPIC_LIST="$(ros2 topic list --no-daemon 2>/dev/null || true)"
 
 if [[ -n "$EXPECTED_NODE" ]]; then
   if grep -Fxq "$EXPECTED_NODE" <<<"$NODE_LIST"; then
@@ -118,7 +115,7 @@ check_topic() {
     return
   fi
 
-  info="$(ros2 topic info "$topic" -v 2>/dev/null || true)"
+  info="$(ros2 topic info "$topic" -v --no-daemon 2>/dev/null || true)"
   publisher_count="$(awk -F': ' '/Publisher count:/ {print $2; exit}' <<<"$info")"
   subscriber_count="$(awk -F': ' '/Subscription count:/ {print $2; exit}' <<<"$info")"
   publisher_count="${publisher_count:-unknown}"
@@ -136,7 +133,7 @@ if command -v timeout >/dev/null 2>&1; then
     if ! grep -Fxq "$topic" <<<"$TOPIC_LIST"; then
       return
     fi
-    info="$(ros2 topic info "$topic" -v 2>/dev/null || true)"
+    info="$(ros2 topic info "$topic" -v --no-daemon 2>/dev/null || true)"
     publisher_count="$(awk -F': ' '/Publisher count:/ {print $2; exit}' <<<"$info")"
     if [[ ! "$publisher_count" =~ ^[0-9]+$ || "$publisher_count" -eq 0 ]]; then
       warn_check "topic rate skipped; no active publisher: $topic"

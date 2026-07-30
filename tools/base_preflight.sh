@@ -74,7 +74,7 @@ source_if_present "$BASE_SETUP"
 
 if command -v ros2 >/dev/null 2>&1; then
   pass_msg "ros2 command is available"
-  package_prefix="$(ROS2CLI_NO_DAEMON=1 timeout 8 ros2 pkg prefix "$PACKAGE_NAME" 2>/dev/null || true)"
+  package_prefix="$(timeout 8 ros2 pkg prefix "$PACKAGE_NAME" 2>/dev/null || true)"
   if [[ -n "$package_prefix" ]]; then
     pass_msg "ROS package is discoverable: $PACKAGE_NAME"
   else

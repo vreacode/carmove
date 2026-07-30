@@ -11,6 +11,7 @@ import argparse
 import csv
 import datetime as dt
 import os
+import shutil
 import sys
 import time
 from contextlib import suppress
@@ -47,6 +48,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-frames", type=int, default=0, help="0 means run until Ctrl+C")
     parser.add_argument("--duration", type=float, default=0.0, help="maximum capture duration in seconds; 0 means no time limit")
     parser.add_argument("--jpeg-quality", type=int, default=95, help="JPEG quality 1-100")
+    parser.add_argument(
+        "--min-free-gb",
+        type=float,
+        default=0.0,
+        help="stop cleanly before saving when free storage falls below this reserve",
+    )
     parser.add_argument("--scene", default="", help="scene identifier, for example gate_a_day")
     parser.add_argument("--note", default="", help="free-form capture note")
     parser.add_argument("--preview", action="store_true", help="show preview; press q to stop")
@@ -55,6 +62,11 @@ def parse_args() -> argparse.Namespace:
 
 def frame_is_valid(frame) -> bool:
     return frame is not None and frame.size > 0 and frame.ndim in (2, 3) and frame.shape[0] >= 64 and frame.shape[1] >= 64
+
+
+def storage_reserve_available(path: Path, min_free_gb: float) -> tuple[bool, float]:
+    free_gb = shutil.disk_usage(path).free / (1024**3)
+    return min_free_gb <= 0 or free_gb >= min_free_gb, free_gb
 
 
 def open_capture(cv2, source: int | str, args: argparse.Namespace):
@@ -119,6 +131,9 @@ def main() -> int:
         return 2
     if not 1 <= args.jpeg_quality <= 100:
         print("--jpeg-quality must be between 1 and 100", file=sys.stderr)
+        return 2
+    if args.min_free_gb < 0:
+        print("--min-free-gb must be zero or greater", file=sys.stderr)
         return 2
 
     output_dir = Path(args.output)
@@ -189,6 +204,8 @@ def main() -> int:
     print(f"capturing from {args.source}")
     print(f"frames: {output_dir}")
     print(f"manifest: {manifest_path}")
+    if args.min_free_gb:
+        print(f"storage safety reserve: {args.min_free_gb:.1f} GiB")
     limit_text = f", duration limit: {args.duration:.1f}s" if args.duration else ""
     print("stop with Ctrl+C" + (" or q in the preview window" if args.preview else "") + limit_text)
 
@@ -222,6 +239,20 @@ def main() -> int:
             filename = captured_at.strftime("%Y%m%d_%H%M%S_%f")[:-3] + ".jpg"
             frame_path = output_dir / filename
             temporary_path = output_dir / f".{frame_path.stem}.part.jpg"
+            try:
+                storage_ok, free_gb = storage_reserve_available(output_dir, args.min_free_gb)
+            except OSError as exc:
+                print(f"capture storage check failed: {exc}", file=sys.stderr)
+                fatal_error = True
+                break
+            if not storage_ok:
+                print(
+                    f"capture storage fell below safety reserve: "
+                    f"{free_gb:.2f} GiB free, {args.min_free_gb:.2f} GiB required",
+                    file=sys.stderr,
+                )
+                fatal_error = True
+                break
             ok = cv2.imwrite(
                 str(temporary_path),
                 frame,
