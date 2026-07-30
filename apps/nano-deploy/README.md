@@ -70,6 +70,9 @@ Low latency comes from WebRTC. The browser does **not** pull RTSP directly. The 
 - Whitelist-only car control commands with ACK responses.
 - Workflow panels for mapping, map saving, navigation, and RViz launch through the Agent whitelist.
 - Independent outdoor 3D mode with XT-16 per-point timestamps, Yesense IMU, selectable GLIM/FAST-LIO2 backends, neutral A/B rosbag recording, RViz, and timestamp-named outputs.
+- Field capture readiness gates: RTSP warm-up with consecutive-frame validation,
+  atomic JPEG/manifest writes, free-space protection, and live XT-16/IMU
+  validation before rosbag is reported as recording.
 - Online 2D map viewer that reads saved `yaml + pgm` maps from the configured maps directory.
 - Status cards for Agent availability, video source, model, CPU, memory, GPU, and heartbeat.
 
@@ -305,6 +308,14 @@ The web Navigation page exposes both backends and neutral A/B recording under
 `室外 3D`. Starting either mapping workflow does not start the chassis or move
 the vehicle. GLIM writes a graph/trajectory directory, while FAST-LIO2 writes
 a timestamp-named PCD under `/home/nvidia/Desktop/wheeltec_ros2/maps/outdoor/`.
+
+For field recording, keep the vehicle stationary while the page says it is
+validating LiDAR and IMU. The green recording-ready card is shown only after
+the verifier sees valid XT-16 point fields, monotonic timestamps, usable
+LiDAR/IMU rates, and a growing rosbag file. On the mobile image-capture page,
+the start request similarly returns only after a complete first frame has
+been saved; the page also shows resolution, elapsed time, written size, and
+remaining storage.
 
 Neither an outdoor PCD nor a GLIM graph is directly a Nav2 map. Ground/obstacle projection and
 repeatable global localization must be validated before outdoor autonomous

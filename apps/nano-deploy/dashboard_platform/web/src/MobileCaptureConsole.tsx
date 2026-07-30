@@ -35,6 +35,11 @@ function explainMobileError(error: unknown) {
   if (message.includes("capture is already running")) return "已有采集任务在运行。";
   if (message.includes("capture script not found")) return "采集脚本未部署到板端。";
   if (message.includes("source is not configured")) return "当前视频源未配置。";
+  if (message.includes("capture storage is low")) return "剩余磁盘空间不足 5 GB，请先清理数据。";
+  if (message.includes("capture storage is unavailable")) return "无法读取采集磁盘，请检查存储设备。";
+  if (message.includes("did not produce a valid frame")) return "视频首帧验证失败，请检查相机链路后重试。";
+  if (message.includes("Unable to open video source")) return "无法打开视频流，请检查相机和网线。";
+  if (message.includes("stream warm-up failed")) return "视频预热失败，没有收到连续完整画面。";
   if (message.includes("manual control is locked")) return "手动控制已锁定，请先在控制台解锁。";
   if (message.includes("navigation is running")) return "导航正在运行，请先停止导航或启用人工接管。";
   if (message.includes("base is not ready") || message.includes("chassis topics are not ready")) return "底盘基础链路未就绪：请检查底盘电源、串口和 ROS 节点。";
@@ -108,6 +113,17 @@ function baseReady(status: SystemStatus | null) {
 function captureProgress(capture: CaptureStatus | null) {
   if (!capture?.running || !capture.max_frames) return 0;
   return Math.min(100, Math.round((capture.frames_saved / capture.max_frames) * 100));
+}
+
+function formatCaptureSize(bytes?: number) {
+  if (!bytes) return "0 MB";
+  return `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
+
+function formatCaptureElapsed(seconds?: number) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  const minutes = Math.floor(total / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 function Metric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "warn" }) {
@@ -248,9 +264,9 @@ export default function MobileCaptureConsole() {
   const [useFallback, setUseFallback] = useState(false);
   const [streamMode, setStreamMode] = useState<CaptureMode>("visible_raw");
   const [scene, setScene] = useState(timestampCaptureName);
-  const [note, setNote] = useState("园区入口，白天，垃圾和车辆");
+  const [note, setNote] = useState("");
   const [interval, setIntervalSeconds] = useState(1);
-  const [durationMinutes, setDurationMinutes] = useState(3);
+  const [durationMinutes, setDurationMinutes] = useState(5);
   const [pending, setPending] = useState<"start" | "stop" | "snapshot" | "refresh" | "">("");
   const [deletingGroup, setDeletingGroup] = useState("");
   const [error, setError] = useState("");
@@ -266,6 +282,9 @@ export default function MobileCaptureConsole() {
   const cruiseActive = status?.motion_state?.cruise_active ?? false;
   const cruiseSteering = status?.motion_state?.cruise_steering ?? "center";
   const cruiseBlocked = !status?.motion_state || status.motion_state.nav_lockout;
+  const capturePreparing = pending === "start" || capture?.phase === "starting";
+  const captureReady = !!capture?.running && !!capture.ready;
+  const storageBlocked = capture?.storage_free_gb != null && capture.storage_free_gb < 5;
   const latestFrameUrl = capture?.latest_frame
     ? `${API_BASE}/api/capture/latest?token=${encodeURIComponent(token)}&v=${capture.frames_saved}`
     : "";
@@ -566,7 +585,7 @@ export default function MobileCaptureConsole() {
       });
       setCapture(payload);
       if (payload.stream_mode) setStreamMode(payload.stream_mode);
-      setToast("采集已开始");
+      setToast("首帧已验证，采集已开始");
     } catch (err) {
       setError(explainMobileError(err));
     } finally {
@@ -650,11 +669,16 @@ export default function MobileCaptureConsole() {
 
           <section className={`mobile-capture-card ${capture?.running ? "is-running" : ""}`}>
             <div className="mobile-section-heading">
-              <div><span className="mobile-eyebrow">{capture?.running ? "CAPTURE IN PROGRESS" : "READY FOR FIELD"}</span><h2>{capture?.running ? `正在采集 ${capture.scene}` : "准备采集一段现场"}</h2></div>
-              <div className={`mobile-capture-orb ${capture?.running ? "is-running" : ""}`}><CameraIcon /></div>
+              <div><span className="mobile-eyebrow">{capturePreparing ? "VERIFYING FIRST FRAME" : captureReady ? "CAPTURE VERIFIED" : capture?.phase === "completed" ? "CAPTURE COMPLETE" : "READY FOR FIELD"}</span><h2>{capturePreparing ? "正在连接并验证完整画面" : captureReady ? `正在采集 ${capture.scene}` : capture?.phase === "completed" ? "上一段采集已安全保存" : "准备采集一段现场"}</h2></div>
+              <div className={`mobile-capture-orb ${capture?.running || capturePreparing ? "is-running" : ""}`}><CameraIcon /></div>
             </div>
-            <div className="mobile-capture-counter"><strong>{capture?.frames_saved ?? 0}</strong><span>张已保存</span>{capture?.running ? <small>每 {capture.interval_seconds ?? interval}s 一张</small> : <small>保存为带 manifest 的原始帧</small>}</div>
+            <div className="mobile-capture-counter"><strong>{capture?.frames_saved ?? 0}</strong><span>张已保存</span>{capture?.running ? <small>{capture.frame_width && capture.frame_height ? `${capture.frame_width}×${capture.frame_height} · ` : ""}{formatCaptureSize(capture.bytes_saved)} · {formatCaptureElapsed(capture.elapsed_seconds)}</small> : <small>完整帧 + manifest 自动落盘</small>}</div>
             {capture?.running ? <div className="mobile-capture-progress-wrap"><div className="mobile-capture-progress"><span style={{ width: `${captureProgress(capture)}%` }} /></div><div><span>任务进度</span><strong>{capture.max_frames ? `${capture.frames_saved} / ${capture.max_frames} 帧` : "持续采集中"}</strong></div></div> : null}
+            <div className="mobile-capture-readiness" aria-label="现场采集就绪检查">
+              <div className={online ? "is-good" : "is-bad"}><span>{online ? <CheckCircleIcon /> : <ExclamationTriangleIcon />}</span><strong>控制台</strong><small>{online ? "在线" : "离线"}</small></div>
+              <div className={captureReady || cameraOnline ? "is-good" : "is-waiting"}><span>{captureReady || cameraOnline ? <CheckCircleIcon /> : <ArrowPathIcon />}</span><strong>视频</strong><small>{captureReady ? "首帧已验" : cameraOnline ? "链路可用" : "启动时检查"}</small></div>
+              <div className={storageBlocked ? "is-bad" : capture?.storage_free_gb != null ? "is-good" : "is-waiting"}><span>{storageBlocked ? <ExclamationTriangleIcon /> : <ArchiveBoxIcon />}</span><strong>存储</strong><small>{capture?.storage_free_gb != null ? `${capture.storage_free_gb.toFixed(0)} GB` : "读取中"}</small></div>
+            </div>
             <div className="mobile-mode-switch" aria-label="选择采集视频源">
               <button className={streamMode === "visible_raw" ? "is-active" : ""} onClick={() => setStreamMode("visible_raw")} disabled={!!capture?.running}>
                 <strong>可见光</strong><small>video1 · 1920×1080</small>
@@ -665,14 +689,14 @@ export default function MobileCaptureConsole() {
             </div>
             <div className="mobile-form-grid">
               <label className="mobile-field mobile-field-wide"><span><MapPinIcon />数据集名称 · 启动时自动生成</span><input value={scene} readOnly aria-readonly="true" /></label>
-              <label className="mobile-field mobile-field-wide"><span><ArchiveBoxIcon />现场备注</span><input value={note} onChange={(event) => setNote(event.target.value)} disabled={!!capture?.running} placeholder="光照、路线、目标说明" /></label>
+              <label className="mobile-field mobile-field-wide"><span><ArchiveBoxIcon />现场备注（可选）</span><input value={note} onChange={(event) => setNote(event.target.value)} disabled={!!capture?.running} placeholder="例如：园区入口 / 阴天 / 行人和车辆" /></label>
               <label className="mobile-field"><span><ClockIcon />间隔</span><select value={interval} onChange={(event) => setIntervalSeconds(Number(event.target.value))} disabled={!!capture?.running}><option value={0.5}>0.5 秒</option><option value={1}>1 秒</option><option value={2}>2 秒</option><option value={5}>5 秒</option></select></label>
-              <label className="mobile-field"><span><ChartBarIcon />时长</span><select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} disabled={!!capture?.running}><option value={1}>1 分钟</option><option value={3}>3 分钟</option><option value={5}>5 分钟</option><option value={10}>10 分钟</option></select></label>
+              <label className="mobile-field"><span><ChartBarIcon />时长</span><select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} disabled={!!capture?.running}><option value={1}>1 分钟</option><option value={3}>3 分钟</option><option value={5}>5 分钟</option><option value={10}>10 分钟</option><option value={20}>20 分钟</option></select></label>
             </div>
             {capture?.running ? (
               <button className="mobile-stop-button" onClick={() => void stopCapture()} disabled={pending !== ""}><StopCircleIcon />{pending === "stop" ? "正在停止…" : "停止采集"}</button>
             ) : (
-              <button className="mobile-primary-button mobile-start-button" onClick={() => void startCapture()} disabled={pending !== "" || !online}><PlayCircleIcon />{pending === "start" ? "正在启动…" : `开始采集 ${captureModeLabel(streamMode)}`}</button>
+              <button className="mobile-primary-button mobile-start-button" onClick={() => void startCapture()} disabled={pending !== "" || !online || storageBlocked}><PlayCircleIcon />{pending === "start" ? "正在预热并验证首帧…" : storageBlocked ? "存储不足，无法开始" : `开始采集 ${captureModeLabel(streamMode)}`}</button>
             )}
             <button className="mobile-secondary-action" onClick={() => void takeSnapshot()} disabled={pending !== "" || !online}><PhotoIcon />只保存当前这一帧 · {captureModeLabel(streamMode)}</button>
           </section>

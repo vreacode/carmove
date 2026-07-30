@@ -12,6 +12,7 @@ PID_FILE="${PID_DIR}/outdoor_bag.pids"
 LAUNCHER_PID_FILE="${PID_DIR}/outdoor_bag.launcher.pid"
 STATE_FILE="${ROOT_DIR}/dashboard_platform/runtime/outdoor_bag.state"
 LIDAR_SCRIPT="${ROOT_DIR}/scripts/ensure_lidar_hesai_xt16.sh"
+STREAM_CHECK_SCRIPT="${ROOT_DIR}/scripts/verify_outdoor_streams.py"
 OUTDOOR_BAG_DIR="${OUTDOOR_BAG_DIR:-/home/nvidia/Desktop/wheeltec_ros2/bags/outdoor}"
 
 # Core mapping streams plus optional chassis/GNSS diagnostics. Regex discovery
@@ -45,19 +46,6 @@ topic_has_publisher() {
     ROS2CLI_NO_DAEMON=1 ros2 topic info "${topic}" -v 2>/dev/null || true
   )"
   grep -Eq 'Publisher count: [1-9][0-9]*' <<<"${output}"
-}
-
-wait_for_topic() {
-  local topic="$1"
-  local timeout_secs="$2"
-  local deadline=$((SECONDS + timeout_secs))
-  until topic_has_publisher "${topic}"; do
-    if ((SECONDS >= deadline)); then
-      echo "${topic} did not become ready within ${timeout_secs}s" >&2
-      return 1
-    fi
-    sleep 0.5
-  done
 }
 
 process_matches() {
@@ -131,6 +119,55 @@ read_state_value() {
   sed -n "s/^${key}=//p" "${STATE_FILE}" | head -n 1
 }
 
+write_state() {
+  local temporary_state="${STATE_FILE}.tmp.$$"
+  {
+    printf 'bag_name=%s\n' "${BAG_NAME:-}"
+    printf 'bag_path=%s\n' "${BAG_PATH:-}"
+    printf 'phase=%s\n' "${PHASE:-starting}"
+    printf 'requested_at=%s\n' "${REQUESTED_AT:-}"
+    printf 'started_at=%s\n' "${STARTED_AT:-}"
+    printf 'ready_at=%s\n' "${READY_AT:-}"
+    printf 'lidar_hz=%s\n' "${LIDAR_HZ:-}"
+    printf 'imu_hz=%s\n' "${IMU_HZ:-}"
+    printf 'lidar_frame=%s\n' "${LIDAR_FRAME:-}"
+    printf 'imu_frame=%s\n' "${IMU_FRAME:-}"
+    printf 'point_count=%s\n' "${POINT_COUNT:-}"
+    printf 'last_error=%s\n' "${LAST_ERROR:-}"
+  } >"${temporary_state}"
+  mv "${temporary_state}" "${STATE_FILE}"
+}
+
+load_state() {
+  BAG_NAME="$(read_state_value bag_name 2>/dev/null || true)"
+  BAG_PATH="$(read_state_value bag_path 2>/dev/null || true)"
+  PHASE="$(read_state_value phase 2>/dev/null || true)"
+  REQUESTED_AT="$(read_state_value requested_at 2>/dev/null || true)"
+  STARTED_AT="$(read_state_value started_at 2>/dev/null || true)"
+  READY_AT="$(read_state_value ready_at 2>/dev/null || true)"
+  LIDAR_HZ="$(read_state_value lidar_hz 2>/dev/null || true)"
+  IMU_HZ="$(read_state_value imu_hz 2>/dev/null || true)"
+  LIDAR_FRAME="$(read_state_value lidar_frame 2>/dev/null || true)"
+  IMU_FRAME="$(read_state_value imu_frame 2>/dev/null || true)"
+  POINT_COUNT="$(read_state_value point_count 2>/dev/null || true)"
+  LAST_ERROR="$(read_state_value last_error 2>/dev/null || true)"
+}
+
+stream_metric() {
+  local report="$1"
+  local key="$2"
+  sed -n "s/.* ${key}=\\([^ ]*\\).*/\\1/p" <<<"${report}" | tail -n 1
+}
+
+bag_has_payload() {
+  local payload_file
+  payload_file="$(
+    find "${BAG_PATH}" -maxdepth 1 -type f \( -name '*.db3' -o -name '*.mcap' \) -size +4096c -print -quit 2>/dev/null ||
+      true
+  )"
+  [[ -n "${payload_file}" ]]
+}
+
 stop_running() {
   local pid
   pid="$(launcher_pid 2>/dev/null || true)"
@@ -162,6 +199,10 @@ preflight() {
     echo "Missing Hesai startup helper: ${LIDAR_SCRIPT}" >&2
     return 1
   }
+  [[ -x "${STREAM_CHECK_SCRIPT}" ]] || {
+    echo "Missing outdoor stream verifier: ${STREAM_CHECK_SCRIPT}" >&2
+    return 1
+  }
   if pgrep -af 'fastlio_mapping|glim_rosnode|glim_rosbag|async_slam_toolbox_node' |
     grep -v 'pgrep -af' >/dev/null
   then
@@ -179,12 +220,27 @@ preflight() {
 ACTION="${1:-start}"
 case "${ACTION}" in
   stop)
+    load_state
+    PREVIOUS_PHASE="${PHASE}"
     stop_running
-    report_bag
-    exit $?
+    if [[ "${PREVIOUS_PHASE}" == "recording" ]]; then
+      if report_bag; then
+        STOP_RESULT=0
+      else
+        STOP_RESULT=$?
+      fi
+    else
+      echo "Outdoor recording startup cancelled before the bag became ready."
+      STOP_RESULT=0
+    fi
+    PHASE="stopped"
+    LAST_ERROR=""
+    write_state
+    exit "${STOP_RESULT}"
     ;;
   status)
-    if launcher_pid >/dev/null 2>&1 && child_pid recorder >/dev/null 2>&1; then
+    CURRENT_PHASE="$(read_state_value phase 2>/dev/null || true)"
+    if launcher_pid >/dev/null 2>&1 && child_pid recorder >/dev/null 2>&1 && [[ "${CURRENT_PHASE}" == "recording" ]]; then
       echo "Outdoor sensor recording running: $(read_state_value bag_name 2>/dev/null || echo unknown)"
       exit 0
     fi
@@ -221,16 +277,39 @@ BAG_PATH="${OUTDOOR_BAG_DIR}/${BAG_NAME}"
 preflight
 stop_running
 rm -f "${PID_FILE}"
-printf 'bag_name=%s\nbag_path=%s\nstarted_at=%s\n' \
-  "${BAG_NAME}" "${BAG_PATH}" "$(date --iso-8601=seconds)" >"${STATE_FILE}"
+PHASE="starting"
+REQUESTED_AT="$(date --iso-8601=seconds)"
+STARTED_AT=""
+READY_AT=""
+LIDAR_HZ=""
+IMU_HZ=""
+LIDAR_FRAME=""
+IMU_FRAME=""
+POINT_COUNT=""
+LAST_ERROR=""
+write_state
 printf '%s\n' "$$" >"${LAUNCHER_PID_FILE}"
-trap cleanup_children EXIT INT TERM
+
+on_exit() {
+  local result="$1"
+  cleanup_children
+  if [[ "${result}" -ne 0 && "${PHASE:-}" != "stopped" ]]; then
+    PHASE="failed"
+    LAST_ERROR="${LAST_ERROR:-Outdoor recording setup failed; inspect outdoor_bag_launcher.log}"
+    write_state || true
+  fi
+}
+trap 'on_exit $?' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 exec >>"${LOG_DIR}/outdoor_bag_launcher.log" 2>&1
 echo "[$(date '+%F %T')] starting outdoor rosbag name=${BAG_NAME} launcher=$$"
 
-"${LIDAR_SCRIPT}" start
-wait_for_topic /lidar_points 25
+"${LIDAR_SCRIPT}" start || {
+  LAST_ERROR="Hesai XT-16 failed to start"
+  exit 1
+}
 
 if ! topic_has_publisher /imu/data_raw; then
   run_cmd "yesense" \
@@ -238,8 +317,27 @@ if ! topic_has_publisher /imu/data_raw; then
      source /home/nvidia/serial-ros2/install/setup.bash && \
      source '/home/nvidia/imu-driver/ROS2 SDK/yesense_ros2/install/setup.bash' && \
      exec ros2 launch yesense_std_ros2 yesense_node.launch.py"
-  wait_for_topic /imu/data_raw 15
 fi
+
+PHASE="validating"
+write_state
+STREAM_REPORT="$(
+  ros_env
+  ROS2CLI_NO_DAEMON=1 python3 "${STREAM_CHECK_SCRIPT}" \
+    --lidar-topic /lidar_points \
+    --imu-topic /imu/data_raw \
+    --sample-seconds 4.0 \
+    --ready-timeout 12.0
+)" || {
+  LAST_ERROR="LiDAR/IMU live data validation failed"
+  exit 1
+}
+echo "${STREAM_REPORT}"
+LIDAR_HZ="$(stream_metric "${STREAM_REPORT}" lidar_hz)"
+IMU_HZ="$(stream_metric "${STREAM_REPORT}" imu_hz)"
+LIDAR_FRAME="$(stream_metric "${STREAM_REPORT}" lidar_frame)"
+IMU_FRAME="$(stream_metric "${STREAM_REPORT}" imu_frame)"
+POINT_COUNT="$(stream_metric "${STREAM_REPORT}" point_count)"
 
 run_cmd "recorder" \
   "source /opt/ros/humble/setup.bash && \
@@ -251,14 +349,23 @@ run_cmd "recorder" \
      --max-bag-duration 300 \
      --max-cache-size 67108864"
 
-for _ in {1..20}; do
-  [[ -d "${BAG_PATH}" ]] && break
+for _ in {1..30}; do
+  if child_pid recorder >/dev/null 2>&1 && bag_has_payload; then
+    break
+  fi
   sleep 0.5
 done
-[[ -d "${BAG_PATH}" ]] || {
-  echo "rosbag recorder did not create ${BAG_PATH}; inspect ${LOG_DIR}/recorder.log" >&2
+if ! child_pid recorder >/dev/null 2>&1 || ! bag_has_payload; then
+  LAST_ERROR="rosbag recorder did not begin writing data"
+  echo "${LAST_ERROR}: ${BAG_PATH}; inspect ${LOG_DIR}/recorder.log" >&2
   exit 1
-}
+fi
+
+PHASE="recording"
+STARTED_AT="$(date --iso-8601=seconds)"
+READY_AT="${STARTED_AT}"
+LAST_ERROR=""
+write_state
 
 echo "[$(date '+%F %T')] outdoor recording ready, output=${BAG_PATH}"
 echo "Keep the first 10 seconds stationary, then drive a loop and return near the start."

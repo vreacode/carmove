@@ -103,8 +103,13 @@ export type SystemStatus = {
   mapping_mode?: "indoor_2d" | "outdoor_3d" | null;
   mapping_backend?: "slam_toolbox" | "fastlio2" | "glim" | null;
   outdoor_recording?: boolean;
-  outdoor_recording_state?: "idle" | "starting" | "recording";
+  outdoor_recording_state?: "idle" | "starting" | "recording" | "failed";
   outdoor_recording_name?: string | null;
+  outdoor_recording_started_at?: string | null;
+  outdoor_recording_size_bytes?: number;
+  outdoor_recording_lidar_hz?: number | null;
+  outdoor_recording_imu_hz?: number | null;
+  outdoor_recording_error?: string | null;
   navigation_running?: boolean;
   exploration_running?: boolean;
   exploration_state?: string;
@@ -246,6 +251,8 @@ export type MediaItem = {
 export type CaptureStatus = {
   enabled: boolean;
   running: boolean;
+  phase?: "idle" | "starting" | "recording" | "completed" | "failed";
+  ready?: boolean;
   stream_mode?: "visible_raw" | "ir_raw" | null;
   scene?: string | null;
   note?: string;
@@ -258,6 +265,14 @@ export type CaptureStatus = {
   output_dir?: string;
   manifest_path?: string;
   latest_frame?: string | null;
+  first_frame_at?: string | null;
+  last_frame_at?: string | null;
+  elapsed_seconds?: number;
+  frame_width?: number | null;
+  frame_height?: number | null;
+  bytes_saved?: number;
+  storage_free_gb?: number | null;
+  decoder_warnings?: number;
   last_line?: string | null;
   last_error?: string | null;
   command?: string[];

@@ -35,6 +35,11 @@ class AgentSettings(BaseSettings):
     capture_workdir: Path = Path("/home/nvidia/carmove")
     capture_output_root: Path = Path("/home/nvidia/carmove/datasets/local/roadside_v1")
     capture_python_bin: str = ""
+    capture_min_free_gb: float = 5.0
+    capture_ready_timeout_seconds: float = 15.0
+    capture_warmup_seconds: float = 4.0
+    capture_warmup_valid_frames: int = 12
+    capture_rtsp_transport: str = "tcp"
     battery_enabled: bool = True
     battery_voltage_topic: str = "/PowerVoltage"
     battery_charging_topic: str = "/robot_charging_flag"

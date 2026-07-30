@@ -36,7 +36,12 @@ GLIM 官方测试平台一致。
    丢点云帧；
 5. 将 LiDAR/IMU 订阅改为与驱动一致的 RELIABLE 深队列后，15 秒输出
    157 个位姿，LiDAR 间隙、IMU 间隙和 LiDAR/IMU 时差告警均为 0，并
-   正常保存地图。
+   正常保存地图；
+6. 外场录包启动闸门实测通过：只有连续采到 XT-16 10.0 Hz、Yesense
+   200.0 Hz，确认 `x/y/z/intensity/ring/timestamp` 字段、时间戳单调且
+   rosbag 文件已经增长后，网页才显示“录制中”；
+7. 6.49 秒验证包记录 65 帧点云和 823 帧 `/imu/data_raw`，停止后
+   `metadata.yaml` 完整，包大小约 104 MiB。
 
 短时间静止测试只能证明链路与时间处理正确，不能替代运动闭环、外参和
 绝对精度验收。
@@ -52,6 +57,8 @@ GLIM 官方测试平台一致。
   停止并保存；
 - `apps/nano-deploy/scripts/record_outdoor_sensors.sh`：算法无关的现场
   rosbag；
+- `apps/nano-deploy/scripts/verify_outdoor_streams.py`：录制前同时验证
+  XT-16/IMU 频率、字段、frame_id、点数与时间戳；
 - `apps/nano-deploy/scripts/benchmark_outdoor_backends.sh`：顺序运行
   GLIM/FAST-LIO2 A/B；
 - `apps/nano-deploy/scripts/summarize_outdoor_benchmark.py`：闭环与资源
@@ -70,16 +77,20 @@ rosbag:    /home/nvidia/Desktop/wheeltec_ros2/bags/outdoor/<时间戳>/
 A/B结果:   /home/nvidia/Desktop/wheeltec_ros2/benchmarks/outdoor/<运行时间>/
 ```
 
-## 明天外场：推荐只采一次
+## 下午外场：推荐只采一次
 
 优先使用网页“室外 3D → 记录 A/B 原始数据”。流程：
 
-1. 上电后把车放稳，开始记录；
-2. 前 10 秒保持完全静止，让 IMU 偏置可观测；
-3. 人工低速行驶，依次包含直线、左右转、开阔区和有固定结构物的路段；
-4. 最后回到起点附近，形成闭环；
-5. 停车后再静止 5 秒，然后点击“停止原始数据记录”；
-6. 不要同时启动 GLIM、FAST-LIO2 或室内建图。
+1. 上电后把车放稳，点击“记录 A/B 原始数据”；
+2. 界面显示“正在验证雷达与 IMU”期间不要移动；本机实测约 15 秒；
+3. 只有看到绿色提示“数据正在持续落盘，可以开始低速行驶”后，才开始
+   计算静止时间；
+4. 继续保持完全静止 10 秒，让 IMU 偏置可观测；
+5. 人工低速行驶，依次包含直线、左右转、开阔区和有固定结构物的路段；
+6. 最后回到起点附近，形成闭环；
+7. 停车后再静止 5 秒，然后点击“停止原始数据记录”；
+8. 等待停止校验返回包大小与 Topic 计数后再断电；
+9. 不要同时启动 GLIM、FAST-LIO2 或室内建图。
 
 命令行等价操作：
 

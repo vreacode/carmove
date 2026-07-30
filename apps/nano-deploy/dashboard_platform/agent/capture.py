@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import signal
+import time
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +30,24 @@ class CaptureManager:
         self._status = CaptureStatus()
         self._latest_frame: Path | None = None
 
+    def _storage_free_gb(self) -> float | None:
+        path = self.settings.capture_output_root.expanduser().resolve()
+        while not path.exists() and path != path.parent:
+            path = path.parent
+        try:
+            return round(shutil.disk_usage(path).free / (1024**3), 2)
+        except OSError:
+            return None
+
+    def _elapsed_seconds(self) -> float:
+        if not self._status.started_at:
+            return 0.0
+        try:
+            started_at = datetime.fromisoformat(self._status.started_at)
+            return max(0.0, (datetime.now().astimezone() - started_at).total_seconds())
+        except ValueError:
+            return 0.0
+
     @staticmethod
     def slug_scene(scene: str) -> str:
         value = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_-]+", "_", scene.strip())
@@ -46,11 +65,17 @@ class CaptureManager:
     def status(self) -> CaptureStatus:
         running = bool(self.process and self.process.returncode is None)
         latest = str(self._latest_frame) if self._latest_frame and self._latest_frame.is_file() else None
+        phase = self._status.phase
+        if running:
+            phase = "recording" if self._status.ready else "starting"
         return self._status.model_copy(
             update={
                 "running": running,
+                "phase": phase,
                 "pid": self.process.pid if running and self.process else None,
                 "latest_frame": latest,
+                "elapsed_seconds": self._elapsed_seconds(),
+                "storage_free_gb": self._storage_free_gb(),
             }
         )
 
@@ -223,13 +248,41 @@ class CaptureManager:
             if not line:
                 continue
             self._status = self._status.model_copy(update={"last_line": line})
+            ready_match = re.match(r"stream ready:\s*(\d+)x(\d+)", line)
+            if ready_match:
+                self._status = self._status.model_copy(
+                    update={
+                        "frame_width": int(ready_match.group(1)),
+                        "frame_height": int(ready_match.group(2)),
+                    }
+                )
             match = re.match(r"saved\s+(\d+):\s+(.+)$", line)
             if match:
                 path = Path(match.group(2).strip()).resolve()
                 output_dir = Path(self._status.output_dir).resolve() if self._status.output_dir else None
-                if output_dir and output_dir == path.parent and path.suffix.lower() == ".jpg":
-                    self._latest_frame = path
-                self._status = self._status.model_copy(update={"frames_saved": int(match.group(1))})
+                if not (
+                    output_dir
+                    and output_dir == path.parent
+                    and path.suffix.lower() == ".jpg"
+                    and path.is_file()
+                ):
+                    self.log_buffer.add("capture", "warning", f"ignored invalid saved-frame path: {path}")
+                    continue
+                self._latest_frame = path
+                captured_at = datetime.now().astimezone().isoformat(timespec="seconds")
+                frame_size = path.stat().st_size
+                self._status = self._status.model_copy(
+                    update={
+                        "running": True,
+                        "phase": "recording",
+                        "ready": True,
+                        "frames_saved": int(match.group(1)),
+                        "first_frame_at": self._status.first_frame_at or captured_at,
+                        "last_frame_at": captured_at,
+                        "bytes_saved": self._status.bytes_saved + frame_size,
+                        "last_error": None,
+                    }
+                )
             self.log_buffer.add("capture", "info", line)
 
     async def _read_stderr(self, stream: asyncio.StreamReader | None) -> None:
@@ -239,26 +292,51 @@ class CaptureManager:
             line = raw.decode("utf-8", errors="replace").strip()
             if line:
                 if self._is_transient_decoder_warning(line):
-                    self._status = self._status.model_copy(update={"last_line": line})
+                    self._status = self._status.model_copy(
+                        update={
+                            "last_line": line,
+                            "decoder_warnings": self._status.decoder_warnings + 1,
+                        }
+                    )
                     self.log_buffer.add("capture", "warning", line)
                     continue
                 self._status = self._status.model_copy(update={"last_error": line, "last_line": line})
                 self.log_buffer.add("capture", "error", line)
 
-    async def _wait_for_exit(self) -> None:
-        if self.process is None:
-            return
-        code = await self.process.wait()
-        if code != 0 and not self._status.last_error:
-            self._status = self._status.model_copy(update={"last_error": f"capture process exited with code {code}"})
+    async def _wait_for_exit(self, process: asyncio.subprocess.Process) -> None:
+        code = await process.wait()
+        last_error = self._status.last_error
+        phase = "completed" if code == 0 and self._status.frames_saved > 0 else "failed"
+        if phase == "failed" and not last_error:
+            last_error = f"capture process exited with code {code}" if code != 0 else "capture produced no valid frames"
         self.log_buffer.add("capture", "info", f"capture process exited with code {code}")
-        self.process = None
-        self._status = self._status.model_copy(update={"running": False, "pid": None})
+        if self.process is process:
+            self.process = None
+            self._status = self._status.model_copy(
+                update={
+                    "running": False,
+                    "phase": phase,
+                    "ready": self._status.frames_saved > 0,
+                    "pid": None,
+                    "last_error": last_error,
+                }
+            )
+
+    def _cleanup_empty_session(self, output_dir: Path, manifest_path: Path) -> None:
+        if self._status.frames_saved > 0:
+            return
+        with suppress(OSError):
+            manifest_path.unlink()
+        with suppress(OSError):
+            if output_dir.is_dir() and not any(output_dir.iterdir()):
+                output_dir.rmdir()
 
     async def start(self, request: CaptureStartRequest) -> CaptureStatus:
         async with self._lock:
             if self.process and self.process.returncode is None:
                 raise RuntimeError("capture is already running")
+            if self._wait_task and not self._wait_task.done():
+                await self._wait_task
             script = self.settings.capture_script.expanduser().resolve()
             if not script.is_file():
                 raise RuntimeError(f"capture script not found: {script}")
@@ -275,7 +353,16 @@ class CaptureManager:
             root = self.settings.capture_output_root.expanduser().resolve()
             if root not in output_dir.parents or root not in manifest_path.parents:
                 raise RuntimeError("capture paths must stay inside capture_output_root")
-            output_dir.mkdir(parents=True, exist_ok=True)
+            root.mkdir(parents=True, exist_ok=True)
+            free_gb = self._storage_free_gb()
+            if free_gb is None:
+                raise RuntimeError("capture storage is unavailable")
+            if free_gb < self.settings.capture_min_free_gb:
+                raise RuntimeError(
+                    f"capture storage is low: {free_gb:.1f} GiB free; "
+                    f"{self.settings.capture_min_free_gb:.1f} GiB required"
+                )
+            output_dir.mkdir(parents=True, exist_ok=False)
             manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
             command = [
@@ -290,7 +377,11 @@ class CaptureManager:
                 "--interval",
                 str(request.interval_seconds),
                 "--warmup-seconds",
-                "2.0",
+                str(self.settings.capture_warmup_seconds),
+                "--warmup-valid-frames",
+                str(self.settings.capture_warmup_valid_frames),
+                "--rtsp-transport",
+                self.settings.capture_rtsp_transport,
                 "--scene",
                 scene,
                 "--note",
@@ -303,17 +394,24 @@ class CaptureManager:
             if request.max_frames:
                 command.extend(["--max-frames", str(request.max_frames)])
 
-            self.process = await asyncio.create_subprocess_exec(
-                *command,
-                cwd=str(self.settings.capture_workdir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
-                start_new_session=True,
-            )
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    *command,
+                    cwd=str(self.settings.capture_workdir),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                    start_new_session=True,
+                )
+            except OSError as exc:
+                self._cleanup_empty_session(output_dir, manifest_path)
+                raise RuntimeError(f"unable to launch capture process: {exc}") from exc
+            self.process = process
             self._latest_frame = None
             self._status = CaptureStatus(
                 running=True,
+                phase="starting",
+                ready=False,
                 stream_mode=request.stream_mode,
                 scene=scene,
                 note=request.note,
@@ -321,16 +419,44 @@ class CaptureManager:
                 duration_seconds=request.duration_seconds,
                 max_frames=request.max_frames,
                 started_at=datetime.now().astimezone().isoformat(timespec="seconds"),
-                pid=self.process.pid,
+                pid=process.pid,
                 output_dir=str(output_dir),
                 manifest_path=str(manifest_path),
+                storage_free_gb=free_gb,
                 command=command,
             )
-            self._stdout_task = asyncio.create_task(self._read_stdout(self.process.stdout))
-            self._stderr_task = asyncio.create_task(self._read_stderr(self.process.stderr))
-            self._wait_task = asyncio.create_task(self._wait_for_exit())
-            self.log_buffer.add("capture", "info", f"capture started scene={scene} mode={request.stream_mode}")
-            return self.status()
+            self._stdout_task = asyncio.create_task(self._read_stdout(process.stdout))
+            self._stderr_task = asyncio.create_task(self._read_stderr(process.stderr))
+            self._wait_task = asyncio.create_task(self._wait_for_exit(process))
+            self.log_buffer.add("capture", "info", f"capture preparing scene={scene} mode={request.stream_mode}")
+
+            deadline = time.monotonic() + self.settings.capture_ready_timeout_seconds
+            while time.monotonic() < deadline:
+                if self._status.ready:
+                    self.log_buffer.add("capture", "info", f"capture ready scene={scene} mode={request.stream_mode}")
+                    return self.status()
+                if process.returncode is not None or self.process is None:
+                    break
+                await asyncio.sleep(0.1)
+
+            failure = self._status.last_error or (
+                f"capture did not produce a valid frame within "
+                f"{self.settings.capture_ready_timeout_seconds:.0f}s"
+            )
+            if process.returncode is None:
+                with suppress(ProcessLookupError):
+                    process.send_signal(signal.SIGINT)
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=3)
+                except asyncio.TimeoutError:
+                    with suppress(ProcessLookupError):
+                        process.kill()
+                    await process.wait()
+            self._status = self._status.model_copy(
+                update={"running": False, "phase": "failed", "ready": False, "last_error": failure}
+            )
+            self._cleanup_empty_session(output_dir, manifest_path)
+            raise RuntimeError(failure)
 
     async def stop(self) -> CaptureStatus:
         async with self._lock:
@@ -350,4 +476,5 @@ class CaptureManager:
                     with suppress(ProcessLookupError):
                         process.kill()
                     await process.wait()
+            await asyncio.sleep(0)
             return self.status()

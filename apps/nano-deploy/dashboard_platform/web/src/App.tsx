@@ -93,6 +93,12 @@ function timestampOutdoorDataName(date = new Date()) {
   return `outdoor_data_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
+function formatDataSize(bytes?: number) {
+  if (!bytes) return "0 MB";
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
+}
+
 function App() {
   const [token, setToken] = useState(loadToken());
   const [activeTab, setActiveTab] = useState<SidebarTab>(() => tabFromHash(window.location.hash));
@@ -1384,7 +1390,7 @@ function App() {
                     /> : null}
                     <ActionButton
                       icon={<PlayCircleIcon className="h-5 w-5" />}
-                      label={presetPending === "start_outdoor_recording" || status?.outdoor_recording_state === "starting" ? "正在准备录包 · 请保持静止" : status?.outdoor_recording ? `录制中 · ${status.outdoor_recording_name || "原始数据"}` : "记录 A/B 原始数据"}
+                      label={presetPending === "start_outdoor_recording" || status?.outdoor_recording_state === "starting" ? "正在验证雷达与 IMU · 请保持静止" : status?.outdoor_recording ? `录制中 · ${status.outdoor_recording_name || "原始数据"}` : status?.outdoor_recording_state === "failed" ? "上次启动失败 · 点击重试" : "记录 A/B 原始数据"}
                       disabled={!!presetPending || !!status?.mapping_running || !!status?.outdoor_recording}
                       onClick={() => void startOutdoorRecordingWithTimestamp()}
                     />
@@ -1400,6 +1406,14 @@ function App() {
                     <p className="font-medium">当前阶段：先把室外 3D 地图和轨迹做稳</p>
                     <p className="mt-1 text-xs leading-5 text-slate-700">建议先“记录 A/B 原始数据”，开一条闭环路线后再离线比较两种算法；GNSS 当前定位状态为 0，暂不开放无人看护的室外自主行驶。</p>
                   </div>
+                  {status?.outdoor_recording_state === "recording" ? <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">
+                    <p className="font-semibold">数据正在持续落盘，可以开始低速行驶</p>
+                    <p className="mt-1">XT-16 {status.outdoor_recording_lidar_hz?.toFixed(1) || "--"} Hz · IMU {status.outdoor_recording_imu_hz?.toFixed(0) || "--"} Hz · {formatDataSize(status.outdoor_recording_size_bytes)}</p>
+                  </div> : null}
+                  {status?.outdoor_recording_state === "failed" ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+                    <p className="font-semibold">原始数据录制未通过启动校验</p>
+                    <p className="mt-1">{status.outdoor_recording_error || "请查看系统日志后重试。"}</p>
+                  </div> : null}
                 </>}
                 {mappingWorkspace === "indoor" ? <div className="mt-5 rounded-xl border border-base bg-card/50 p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -1428,10 +1442,10 @@ function App() {
                   </div>
                   <button disabled={navigationPending !== "" || !navigationState?.goal} onClick={() => void cancelNavigationGoal()} className="mt-2 w-full rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "cancel" ? "取消中..." : "取消当前目标"}</button>
                 </div> : <div className="mt-5 grid grid-cols-4 gap-2 rounded-xl border border-base bg-card/50 p-4">
-                  <MetaCard label="XT-16" value={status?.lidar_online ? "在线" : "等待"} />
-                  <MetaCard label="外部 IMU" value={status?.mapping_mode === "outdoor_3d" ? "200 Hz" : "随建图启动"} />
+                  <MetaCard label="XT-16" value={status?.outdoor_recording_lidar_hz ? `${status.outdoor_recording_lidar_hz.toFixed(1)} Hz` : status?.lidar_online ? "在线" : "等待"} />
+                  <MetaCard label="外部 IMU" value={status?.outdoor_recording_imu_hz ? `${status.outdoor_recording_imu_hz.toFixed(0)} Hz` : status?.imu_online ? "在线" : "随任务启动"} />
                   <MetaCard label="后端" value={status?.mapping_backend?.toUpperCase() || outdoorBackend.toUpperCase()} />
-                  <MetaCard label="原始包" value={status?.outdoor_recording_state === "starting" ? "准备中" : status?.outdoor_recording ? "录制中" : "空闲"} />
+                  <MetaCard label="原始包" value={status?.outdoor_recording_state === "starting" ? "校验中" : status?.outdoor_recording_state === "failed" ? "失败" : status?.outdoor_recording ? formatDataSize(status.outdoor_recording_size_bytes) : "空闲"} />
                 </div>}
                 <div className="mt-auto pt-4">
                   {presetPending ? <p className="text-sm text-accent-600">正在执行：{presetPending}</p> : <div className="h-5" />}

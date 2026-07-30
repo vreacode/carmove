@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 from .capture import CaptureManager
 from .config import AgentSettings
 from .logs import LogBuffer
+from .schemas import CaptureStatus
 
 
 class CaptureGalleryTests(unittest.TestCase):
@@ -117,6 +119,34 @@ class CaptureGalleryTests(unittest.TestCase):
             manager = CaptureManager(AgentSettings(_env_file=None, capture_output_root=Path(directory)), LogBuffer(20))
             with self.assertRaises(ValueError):
                 manager.delete_gallery("../outside")
+
+    def test_first_saved_frame_marks_capture_ready_and_tracks_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output_dir = root / "images" / "field_test"
+            output_dir.mkdir(parents=True)
+            frame = output_dir / "frame.jpg"
+            frame.write_bytes(b"valid-frame")
+            manager = CaptureManager(AgentSettings(_env_file=None, capture_output_root=root), LogBuffer(20))
+            manager._status = CaptureStatus(
+                running=True,
+                phase="starting",
+                output_dir=str(output_dir),
+                started_at="2026-07-30T10:00:00+08:00",
+            )
+            stream = asyncio.StreamReader()
+            stream.feed_data(f"stream ready: 1920x1080\nsaved 1: {frame}\n".encode())
+            stream.feed_eof()
+
+            asyncio.run(manager._read_stdout(stream))
+
+            self.assertTrue(manager._status.ready)
+            self.assertEqual(manager._status.phase, "recording")
+            self.assertEqual(manager._status.frames_saved, 1)
+            self.assertEqual(manager._status.frame_width, 1920)
+            self.assertEqual(manager._status.frame_height, 1080)
+            self.assertEqual(manager._status.bytes_saved, len(b"valid-frame"))
+            self.assertIsNotNone(manager._status.first_frame_at)
 
 
 if __name__ == "__main__":

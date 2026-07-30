@@ -107,7 +107,11 @@ class WorkflowStatusTests(unittest.TestCase):
             )
             (runtime_directory / "outdoor_bag.state").write_text(
                 "bag_name=outdoor_data_20260730_105500\n"
-                "bag_path=/tmp/outdoor_data_20260730_105500\n",
+                "bag_path=/tmp/outdoor_data_20260730_105500\n"
+                "phase=recording\n"
+                "started_at=2026-07-30T10:55:10+08:00\n"
+                "lidar_hz=10.0\n"
+                "imu_hz=200.0\n",
                 encoding="utf-8",
             )
             collector = StatusCollector.__new__(StatusCollector)
@@ -130,7 +134,16 @@ class WorkflowStatusTests(unittest.TestCase):
                 _rviz_running,
                 current_map_name,
             ) = collector._workflow_status()
-            recording, recording_state, recording_name = collector._outdoor_recording_status()
+            (
+                recording,
+                recording_state,
+                recording_name,
+                recording_started_at,
+                _recording_size,
+                lidar_hz,
+                imu_hz,
+                recording_error,
+            ) = collector._outdoor_recording_status()
 
             self.assertTrue(mapping_running)
             self.assertEqual(mapping_mode, "outdoor_3d")
@@ -139,6 +152,10 @@ class WorkflowStatusTests(unittest.TestCase):
             self.assertTrue(recording)
             self.assertEqual(recording_state, "recording")
             self.assertEqual(recording_name, "outdoor_data_20260730_105500")
+            self.assertEqual(recording_started_at, "2026-07-30T10:55:10+08:00")
+            self.assertEqual(lidar_hz, 10.0)
+            self.assertEqual(imu_hz, 200.0)
+            self.assertIsNone(recording_error)
 
 
 if __name__ == "__main__":

@@ -111,6 +111,8 @@ class CaptureStartRequest(BaseModel):
 class CaptureStatus(BaseModel):
     enabled: bool = True
     running: bool = False
+    phase: Literal["idle", "starting", "recording", "completed", "failed"] = "idle"
+    ready: bool = False
     stream_mode: Literal["visible_raw", "ir_raw"] | None = None
     scene: str | None = None
     note: str = ""
@@ -123,6 +125,14 @@ class CaptureStatus(BaseModel):
     output_dir: str = ""
     manifest_path: str = ""
     latest_frame: str | None = None
+    first_frame_at: str | None = None
+    last_frame_at: str | None = None
+    elapsed_seconds: float = 0.0
+    frame_width: int | None = None
+    frame_height: int | None = None
+    bytes_saved: int = 0
+    storage_free_gb: float | None = None
+    decoder_warnings: int = 0
     last_line: str | None = None
     last_error: str | None = None
     command: list[str] = Field(default_factory=list)
@@ -221,8 +231,13 @@ class AgentStatus(BaseModel):
     mapping_mode: Literal["indoor_2d", "outdoor_3d"] | None = None
     mapping_backend: Literal["slam_toolbox", "fastlio2", "glim"] | None = None
     outdoor_recording: bool = False
-    outdoor_recording_state: Literal["idle", "starting", "recording"] = "idle"
+    outdoor_recording_state: Literal["idle", "starting", "recording", "failed"] = "idle"
     outdoor_recording_name: str | None = None
+    outdoor_recording_started_at: str | None = None
+    outdoor_recording_size_bytes: int = 0
+    outdoor_recording_lidar_hz: float | None = None
+    outdoor_recording_imu_hz: float | None = None
+    outdoor_recording_error: str | None = None
     navigation_running: bool = False
     exploration_running: bool = False
     exploration_state: str = "idle"

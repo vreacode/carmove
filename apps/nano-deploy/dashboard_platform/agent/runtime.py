@@ -1443,13 +1443,20 @@ class StatusCollector:
 
     def _outdoor_recording_status(
         self,
-    ) -> tuple[bool, Literal["idle", "starting", "recording"], str | None]:
+    ) -> tuple[
+        bool,
+        Literal["idle", "starting", "recording", "failed"],
+        str | None,
+        str | None,
+        int,
+        float | None,
+        float | None,
+        str | None,
+    ]:
         recorder_running = bool(self._find_processes("ros2 bag record"))
         launcher_running = bool(self._find_processes("scripts/record_outdoor_sensors.sh"))
-        if not recorder_running and not launcher_running:
-            return False, "idle", None
-        state: Literal["starting", "recording"] = "recording" if recorder_running else "starting"
         state_path = self.settings.model_workdir / "dashboard_platform/runtime/outdoor_bag.state"
+        values: dict[str, str] = {}
         with suppress(Exception):
             values = {
                 key: value
@@ -1459,8 +1466,45 @@ class StatusCollector:
                     if "=" in line
                 )
             }
-            return True, state, values.get("bag_name") or None
-        return True, state, None
+        phase = values.get("phase", "")
+        if recorder_running and phase in {"", "recording"}:
+            state: Literal["idle", "starting", "recording", "failed"] = "recording"
+        elif recorder_running or launcher_running:
+            state = "starting"
+        elif phase == "failed":
+            state = "failed"
+        else:
+            state = "idle"
+
+        size_bytes = 0
+        bag_path_raw = values.get("bag_path", "")
+        if bag_path_raw:
+            with suppress(OSError):
+                bag_path = Path(bag_path_raw).expanduser().resolve()
+                if bag_path.is_dir():
+                    size_bytes = sum(
+                        path.stat().st_size
+                        for path in bag_path.iterdir()
+                        if path.is_file() and path.suffix in {".db3", ".mcap"}
+                    )
+
+        def optional_float(key: str) -> float | None:
+            with suppress(ValueError):
+                value = values.get(key, "")
+                return float(value) if value else None
+            return None
+
+        active = state in {"starting", "recording"}
+        return (
+            active,
+            state,
+            values.get("bag_name") or None,
+            values.get("started_at") or None,
+            size_bytes,
+            optional_float("lidar_hz"),
+            optional_float("imu_hz"),
+            values.get("last_error") or None,
+        )
 
     def _exploration_status(self) -> tuple[bool, str, str | None]:
         running = bool(self._find_processes("scripts/frontier_explorer.py", "scripts/start_autonomous_mapping.sh"))
@@ -1493,6 +1537,11 @@ class StatusCollector:
             outdoor_recording,
             outdoor_recording_state,
             outdoor_recording_name,
+            outdoor_recording_started_at,
+            outdoor_recording_size_bytes,
+            outdoor_recording_lidar_hz,
+            outdoor_recording_imu_hz,
+            outdoor_recording_error,
         ) = self._outdoor_recording_status()
         exploration_running, exploration_state, exploration_detail = self._exploration_status()
         payload = AgentStatus(
@@ -1509,6 +1558,11 @@ class StatusCollector:
             outdoor_recording=outdoor_recording,
             outdoor_recording_state=outdoor_recording_state,
             outdoor_recording_name=outdoor_recording_name,
+            outdoor_recording_started_at=outdoor_recording_started_at,
+            outdoor_recording_size_bytes=outdoor_recording_size_bytes,
+            outdoor_recording_lidar_hz=outdoor_recording_lidar_hz,
+            outdoor_recording_imu_hz=outdoor_recording_imu_hz,
+            outdoor_recording_error=outdoor_recording_error,
             navigation_running=navigation_running,
             exploration_running=exploration_running,
             exploration_state=exploration_state,
