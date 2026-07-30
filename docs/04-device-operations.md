@@ -18,6 +18,12 @@ systemd 服务还应设置 `TimeoutStopSec=30`。Agent 发起的 `ros2 node list
 `ros2 topic info` 必须带 `--no-daemon`，否则 Humble 的常驻
 `ros2-daemon` 会留在服务 cgroup 内，导致重启一直等待到超时。
 
+Tailscale 必须独立直连互联网，不能绑定桌面代理、校园网代理或雷达网段
+代理。部署 `apps/nano-deploy/deploy/systemd/tailscaled-direct.override.conf`
+到 `/etc/systemd/system/tailscaled.service.d/override.conf` 后执行
+`systemctl daemon-reload` 和 `systemctl restart tailscaled`。如果当前
+Wi-Fi 本身没有公网访问能力，应先切换到手机热点或普通互联网 Wi-Fi。
+
 ## 视觉检测
 
     cd /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
