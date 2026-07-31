@@ -13,6 +13,8 @@ FASTLIO_SETUP="${FASTLIO_SETUP:-/home/nvidia/fastlio2_ws/install/setup.bash}"
 ODOM_RECORDER="${ROOT_DIR}/scripts/record_odom_tum.py"
 SUMMARIZER="${ROOT_DIR}/scripts/summarize_outdoor_benchmark.py"
 METRICS_RUNNER="${ROOT_DIR}/scripts/run_with_metrics.py"
+GLIM_NAV2_EXPORTER="${ROOT_DIR}/scripts/export_glim_nav2_map.sh"
+GLIM_EXPORT_NAV2="${GLIM_EXPORT_NAV2:-true}"
 BENCHMARK_ROOT="${OUTDOOR_BENCHMARK_DIR:-/home/nvidia/Desktop/wheeltec_ros2/benchmarks/outdoor}"
 ROS_DOMAIN_ID="${OUTDOOR_BENCHMARK_ROS_DOMAIN_ID:-77}"
 export ROS_DOMAIN_ID
@@ -86,6 +88,15 @@ run_glim() {
     echo "GLIM did not produce traj_lidar.txt; inspect ${output_dir}/run.log" >&2
     return 1
   }
+
+  if [[ "${GLIM_EXPORT_NAV2}" == "true" ]]; then
+    if [[ -x "${GLIM_NAV2_EXPORTER}" && -f /home/nvidia/glim_ws/overlay_install/setup.bash ]]; then
+      echo "Exporting optimized GLIM cloud and conservative Nav2 projection..."
+      "${GLIM_NAV2_EXPORTER}" "${output_dir}/map" "${output_dir}/nav2_map" "glim_nav2_map"
+    else
+      echo "Skipping Nav2 projection: GLIM export overlay is not installed." >&2
+    fi
+  fi
 }
 
 run_fastlio() {

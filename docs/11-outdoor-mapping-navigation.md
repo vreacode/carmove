@@ -63,7 +63,14 @@ GLIM 官方测试平台一致。
   Topic 频率、时间戳、点数、雷达丢包、轮速路程、累计转角和起止静止段，
   同时生成 `quality_report.json` 与 `quality_report.md`；
 - `apps/nano-deploy/scripts/benchmark_outdoor_backends.sh`：顺序运行
-  GLIM/FAST-LIO2 A/B；
+  GLIM/FAST-LIO2 A/B，并在本机导出 GLIM 优化点云与保守二维投影；
+- `apps/nano-deploy/scripts/export_glim_map.sh`：将 GLIM 图优化目录可靠导出
+  为标准二进制 PLY，并规避上游导出后 Viewer 不退出的问题；
+- `apps/nano-deploy/scripts/project_pointcloud_to_nav2.py`：拟合地面平面，按
+  高度带提取障碍，输出 Nav2 `pgm/yaml` 与投影诊断报告；
+- `apps/nano-deploy/scripts/export_glim_nav2_map.sh`：串联上述两个步骤；
+- `apps/nano-deploy/scripts/build_glim_export_overlay.sh`：以单线程 Release
+  方式构建仅供离线导出的 GLIM 覆盖层，不替换在线 CUDA 建图环境；
 - `apps/nano-deploy/scripts/summarize_outdoor_benchmark.py`：闭环与资源
   摘要；
 - `ros2/fastlio2/hesai_fastlio_adapter/`：FAST-LIO2 所需的 XT-16
@@ -123,6 +130,19 @@ bash scripts/benchmark_outdoor_backends.sh \
 路径长度、起终点平移差、航向差及资源占用。只有车辆确实回到起点附近时，
 闭合误差才有比较意义；没有真值设备时它仍不是绝对精度。
 
+GLIM 完成后还会在 `glim/nav2_map/` 生成：
+
+```text
+optimized_map.ply
+glim_nav2_map.pgm
+glim_nav2_map.yaml
+glim_nav2_map.projection.json
+```
+
+投影报告的 `READY_FOR_REVIEW` 只表示数据规模足以人工检查，不代表已经
+允许自主运动；`PROTOTYPE_ONLY` 表示点数、已知区域或地面连通范围不足。
+可通过 `GLIM_EXPORT_NAV2=false` 临时关闭自动投影。
+
 ## 直接在线建图
 
 网页中选择算法后点击启动即可。命令行操作如下。
@@ -149,7 +169,26 @@ bash scripts/start_outdoor_mapping.sh save
 bash scripts/start_outdoor_mapping.sh stop
 ```
 
-## 为什么三维地图还不能直接导航
+## 三维地图到二维地图的当前进度
+
+2026-07-31 已完成 GLIM 官方优化点云导出和第一版保守二维投影。本机短路线
+实测导出 2,042 个点，生成 103 × 413、0.10 m/px 的 Nav2 地图和诊断报告；
+由于短路线只有约 1 米，报告正确标记为 `PROTOTYPE_ONLY`。该结果证明转换
+链路可用，不代表短路线地图可用于导航。
+
+单独转换已有 GLIM 地图：
+
+```bash
+cd /home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy
+bash scripts/export_glim_nav2_map.sh \
+  /path/to/glim/map /path/to/output/nav2_map outdoor_map
+```
+
+默认将地面平面 ±0.15 m 视作地面，将地面以上 0.20–2.00 m 视作障碍，
+地图外和未观测区域保持 unknown。大坡度、台阶、草地和悬空障碍仍必须结合
+实际场地查看 PGM 与点云后调整阈值。
+
+## 为什么现在仍不能直接自主导航
 
 Nav2 的全局规划与控制仍需要二维 OccupancyGrid/Costmap。GLIM 图优化地图
 或 FAST-LIO2 PCD 都不能直接替代：
@@ -161,14 +200,13 @@ Nav2 的全局规划与控制仍需要二维 OccupancyGrid/Costmap。GLIM 图优
 
 因此当前“室外自主导航”仍保持禁用。推荐下一阶段按顺序推进：
 
-1. 用明天的闭环数据确定主后端，并复核 LiDAR–IMU 外参；
-2. 实现地面分割和高度带障碍投影，输出 Nav2 可消费的 2D/3D 障碍；
-3. 从选定的 3D 地图生成同原点二维全局地图；
-4. 接入开源 NDT/GICP 先验地图定位，完成跨重启重定位；
-5. 再接 Nav2 局部规划与低速有人看护场测；
-6. Yesense GNSS 恢复有效定位后，再评估
+1. 用下一次较长闭环数据复核主后端、LiDAR–IMU 外参和二维投影；
+2. 人工检查二维地图的地面连通、玻璃/草地/坡道和悬空障碍；
+3. 接入开源 NDT/GICP 先验地图定位，完成跨重启重定位；
+4. 再接 Nav2 局部规划与低速有人看护场测；
+5. Yesense GNSS 恢复有效定位后，再评估
    `robot_localization/navsat_transform_node` 的大范围约束；
-7. 完成急停、失联停车和回归测试后，才开放室外自主目标点。
+6. 完成急停、失联停车和回归测试后，才开放室外自主目标点。
 
 当前外参由原车 `base_footprint → laser` 配置换算得到。雷达安装位置相近
 不代表可以跳过复核；如果直线往返出现稳定双墙，应优先检查时间、外参和

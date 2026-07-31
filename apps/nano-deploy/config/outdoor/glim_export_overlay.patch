@@ -1,0 +1,38 @@
+diff --git a/src/glim/viewer/map_editor.cpp b/src/glim/viewer/map_editor.cpp
+index 19aeef7..7654ea1 100644
+--- a/src/glim/viewer/map_editor.cpp
++++ b/src/glim/viewer/map_editor.cpp
+@@ -22,7 +22,5 @@
+ #include <gtsam_points/segmentation/min_cut.hpp>
+ #include <gtsam_points/segmentation/region_growing.hpp>
+ #include <gtsam_points/util/fast_floor.hpp>
+-#include <GLFW/glfw3.h>
+-
+ #include <glim/mapping/sub_map.hpp>
+ #include <glim/util/logging.hpp>
+diff --git a/src/glim/viewer/standard_viewer_ui.cpp b/src/glim/viewer/standard_viewer_ui.cpp
+index 7104bc1..c7fa32d 100644
+--- a/src/glim/viewer/standard_viewer_ui.cpp
++++ b/src/glim/viewer/standard_viewer_ui.cpp
+@@ -138,21 +138,17 @@ void StandardViewer::drawable_selection() {
+       default:
+       case 0:
+         viewer->use_orbit_camera_control();
+-        viewer->use_perspective_projection_control(30.0f, 1.0, 1000.0f);
+         break;
+       case 1:
+         viewer->use_sensor_view_camera_control(Eigen::Translation3f(-0.05f, 0.0f, 0.0f) * Eigen::Isometry3f::Identity(), 1e-3, 1e-3);
+-        viewer->use_perspective_projection_control(90.0f, 0.1f, 500.0f);
+         viewer->disable_xy_grid();
+         break;
+       case 2:
+         viewer->use_sensor_view_camera_control();
+-        viewer->use_perspective_projection_control(45.0f, 0.1f, 500.0f);
+         viewer->disable_xy_grid();
+         break;
+       case 3:
+         viewer->use_topdown_camera_control();
+-        viewer->use_perspective_projection_control(30.0f, 1.0, 1000.0f);
+         break;
+     }
+   }
