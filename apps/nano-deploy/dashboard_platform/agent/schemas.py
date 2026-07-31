@@ -243,6 +243,10 @@ class AgentStatus(BaseModel):
     outdoor_recording_lidar_hz: float | None = None
     outdoor_recording_imu_hz: float | None = None
     outdoor_recording_error: str | None = None
+    outdoor_recording_quality: Literal["PASS", "SENSOR_ONLY", "FAIL"] | None = None
+    outdoor_recording_path_m: float | None = None
+    outdoor_recording_turn_deg: float | None = None
+    outdoor_recording_packet_loss_delta: int | None = None
     navigation_running: bool = False
     exploration_running: bool = False
     exploration_state: str = "idle"

@@ -13,6 +13,7 @@ LAUNCHER_PID_FILE="${PID_DIR}/outdoor_bag.launcher.pid"
 STATE_FILE="${ROOT_DIR}/dashboard_platform/runtime/outdoor_bag.state"
 LIDAR_SCRIPT="${ROOT_DIR}/scripts/ensure_lidar_hesai_xt16.sh"
 STREAM_CHECK_SCRIPT="${ROOT_DIR}/scripts/verify_outdoor_streams.py"
+BAG_ANALYZER="${ROOT_DIR}/scripts/analyze_outdoor_bag.py"
 OUTDOOR_BAG_DIR="${OUTDOOR_BAG_DIR:-/home/nvidia/Desktop/wheeltec_ros2/bags/outdoor}"
 
 # Core mapping streams plus optional chassis/GNSS diagnostics. Regex discovery
@@ -133,6 +134,8 @@ write_state() {
     printf 'lidar_frame=%s\n' "${LIDAR_FRAME:-}"
     printf 'imu_frame=%s\n' "${IMU_FRAME:-}"
     printf 'point_count=%s\n' "${POINT_COUNT:-}"
+    printf 'quality_status=%s\n' "${QUALITY_STATUS:-}"
+    printf 'quality_report=%s\n' "${QUALITY_REPORT:-}"
     printf 'last_error=%s\n' "${LAST_ERROR:-}"
   } >"${temporary_state}"
   mv "${temporary_state}" "${STATE_FILE}"
@@ -150,6 +153,8 @@ load_state() {
   LIDAR_FRAME="$(read_state_value lidar_frame 2>/dev/null || true)"
   IMU_FRAME="$(read_state_value imu_frame 2>/dev/null || true)"
   POINT_COUNT="$(read_state_value point_count 2>/dev/null || true)"
+  QUALITY_STATUS="$(read_state_value quality_status 2>/dev/null || true)"
+  QUALITY_REPORT="$(read_state_value quality_report 2>/dev/null || true)"
   LAST_ERROR="$(read_state_value last_error 2>/dev/null || true)"
 }
 
@@ -194,6 +199,17 @@ report_bag() {
   ros2 bag info "${bag_path}"
 }
 
+analyze_bag() {
+  [[ -n "${BAG_PATH:-}" && -d "${BAG_PATH}" ]] || return 1
+  ros_env
+  local output result=0
+  output="$(python3 "${BAG_ANALYZER}" "${BAG_PATH}" 2>&1)" || result=$?
+  echo "${output}"
+  QUALITY_STATUS="$(sed -n 's/^quality=\([^ ]*\).*/\1/p' <<<"${output}" | tail -n 1)"
+  QUALITY_REPORT="${BAG_PATH}/quality_report.md"
+  return "${result}"
+}
+
 preflight() {
   [[ -x "${LIDAR_SCRIPT}" ]] || {
     echo "Missing Hesai startup helper: ${LIDAR_SCRIPT}" >&2
@@ -201,6 +217,10 @@ preflight() {
   }
   [[ -x "${STREAM_CHECK_SCRIPT}" ]] || {
     echo "Missing outdoor stream verifier: ${STREAM_CHECK_SCRIPT}" >&2
+    return 1
+  }
+  [[ -x "${BAG_ANALYZER}" ]] || {
+    echo "Missing outdoor bag analyzer: ${BAG_ANALYZER}" >&2
     return 1
   }
   if pgrep -af 'fastlio_mapping|glim_rosnode|glim_rosbag|async_slam_toolbox_node' |
@@ -225,7 +245,11 @@ case "${ACTION}" in
     stop_running
     if [[ "${PREVIOUS_PHASE}" == "recording" ]]; then
       if report_bag; then
-        STOP_RESULT=0
+        if analyze_bag; then
+          STOP_RESULT=0
+        else
+          STOP_RESULT=$?
+        fi
       else
         STOP_RESULT=$?
       fi
@@ -234,7 +258,11 @@ case "${ACTION}" in
       STOP_RESULT=0
     fi
     PHASE="stopped"
-    LAST_ERROR=""
+    if [[ "${STOP_RESULT}" -eq 0 ]]; then
+      LAST_ERROR=""
+    else
+      LAST_ERROR="Outdoor bag quality validation failed"
+    fi
     write_state
     exit "${STOP_RESULT}"
     ;;
@@ -286,6 +314,8 @@ IMU_HZ=""
 LIDAR_FRAME=""
 IMU_FRAME=""
 POINT_COUNT=""
+QUALITY_STATUS=""
+QUALITY_REPORT=""
 LAST_ERROR=""
 write_state
 printf '%s\n' "$$" >"${LAUNCHER_PID_FILE}"

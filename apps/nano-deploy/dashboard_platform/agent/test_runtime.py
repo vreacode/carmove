@@ -1,4 +1,5 @@
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -114,9 +115,21 @@ class WorkflowStatusTests(unittest.TestCase):
                 "map_path=/tmp/glim/outdoor_20260730_110000\n",
                 encoding="utf-8",
             )
+            quality_directory = workdir / "bags/outdoor_data_20260730_105500"
+            quality_directory.mkdir(parents=True)
+            (quality_directory / "quality_report.json").write_text(
+                json.dumps(
+                    {
+                        "overall": "PASS",
+                        "odometry": {"path_m": 42.5, "accumulated_turn_deg": 185.0},
+                        "packet_loss": {"packet_loss_delta": 0},
+                    }
+                ),
+                encoding="utf-8",
+            )
             (runtime_directory / "outdoor_bag.state").write_text(
                 "bag_name=outdoor_data_20260730_105500\n"
-                "bag_path=/tmp/outdoor_data_20260730_105500\n"
+                f"bag_path={quality_directory}\n"
                 "phase=recording\n"
                 "started_at=2026-07-30T10:55:10+08:00\n"
                 "lidar_hz=10.0\n"
@@ -152,6 +165,10 @@ class WorkflowStatusTests(unittest.TestCase):
                 lidar_hz,
                 imu_hz,
                 recording_error,
+                recording_quality,
+                recording_path_m,
+                recording_turn_deg,
+                recording_packet_loss_delta,
             ) = collector._outdoor_recording_status()
 
             self.assertTrue(mapping_running)
@@ -165,6 +182,10 @@ class WorkflowStatusTests(unittest.TestCase):
             self.assertEqual(lidar_hz, 10.0)
             self.assertEqual(imu_hz, 200.0)
             self.assertIsNone(recording_error)
+            self.assertEqual(recording_quality, "PASS")
+            self.assertEqual(recording_path_m, 42.5)
+            self.assertEqual(recording_turn_deg, 185.0)
+            self.assertEqual(recording_packet_loss_delta, 0)
 
 
 if __name__ == "__main__":

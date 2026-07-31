@@ -1461,6 +1461,10 @@ class StatusCollector:
         float | None,
         float | None,
         str | None,
+        Literal["PASS", "SENSOR_ONLY", "FAIL"] | None,
+        float | None,
+        float | None,
+        int | None,
     ]:
         recorder_running = bool(self._find_processes("ros2 bag record"))
         launcher_running = bool(self._find_processes("scripts/record_outdoor_sensors.sh"))
@@ -1487,6 +1491,10 @@ class StatusCollector:
 
         size_bytes = 0
         bag_path_raw = values.get("bag_path", "")
+        quality: Literal["PASS", "SENSOR_ONLY", "FAIL"] | None = None
+        quality_path_m: float | None = None
+        quality_turn_deg: float | None = None
+        quality_packet_loss_delta: int | None = None
         if bag_path_raw:
             with suppress(OSError):
                 bag_path = Path(bag_path_raw).expanduser().resolve()
@@ -1496,6 +1504,18 @@ class StatusCollector:
                         for path in bag_path.iterdir()
                         if path.is_file() and path.suffix in {".db3", ".mcap"}
                     )
+                    with suppress(Exception):
+                        quality_payload = json.loads(
+                            (bag_path / "quality_report.json").read_text(encoding="utf-8")
+                        )
+                        quality_value = quality_payload.get("overall")
+                        if quality_value in {"PASS", "SENSOR_ONLY", "FAIL"}:
+                            quality = quality_value
+                        odometry = quality_payload.get("odometry") or {}
+                        packet_loss = quality_payload.get("packet_loss") or {}
+                        quality_path_m = float(odometry["path_m"])
+                        quality_turn_deg = float(odometry["accumulated_turn_deg"])
+                        quality_packet_loss_delta = int(packet_loss["packet_loss_delta"])
 
         def optional_float(key: str) -> float | None:
             with suppress(ValueError):
@@ -1513,6 +1533,10 @@ class StatusCollector:
             optional_float("lidar_hz"),
             optional_float("imu_hz"),
             values.get("last_error") or None,
+            quality,
+            quality_path_m,
+            quality_turn_deg,
+            quality_packet_loss_delta,
         )
 
     def _exploration_status(self) -> tuple[bool, str, str | None]:
@@ -1551,6 +1575,10 @@ class StatusCollector:
             outdoor_recording_lidar_hz,
             outdoor_recording_imu_hz,
             outdoor_recording_error,
+            outdoor_recording_quality,
+            outdoor_recording_path_m,
+            outdoor_recording_turn_deg,
+            outdoor_recording_packet_loss_delta,
         ) = self._outdoor_recording_status()
         exploration_running, exploration_state, exploration_detail = self._exploration_status()
         payload = AgentStatus(
@@ -1572,6 +1600,10 @@ class StatusCollector:
             outdoor_recording_lidar_hz=outdoor_recording_lidar_hz,
             outdoor_recording_imu_hz=outdoor_recording_imu_hz,
             outdoor_recording_error=outdoor_recording_error,
+            outdoor_recording_quality=outdoor_recording_quality,
+            outdoor_recording_path_m=outdoor_recording_path_m,
+            outdoor_recording_turn_deg=outdoor_recording_turn_deg,
+            outdoor_recording_packet_loss_delta=outdoor_recording_packet_loss_delta,
             navigation_running=navigation_running,
             exploration_running=exploration_running,
             exploration_state=exploration_state,

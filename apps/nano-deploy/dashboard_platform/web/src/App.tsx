@@ -1431,6 +1431,17 @@ function App() {
                     <p className="font-semibold">原始数据录制未通过启动校验</p>
                     <p className="mt-1">{status.outdoor_recording_error || "请查看系统日志后重试。"}</p>
                   </div> : null}
+                  {!status?.outdoor_recording && status?.outdoor_recording_quality ? <div className={classNames(
+                    "mt-3 rounded-xl border px-4 py-3 text-xs",
+                    status.outdoor_recording_quality === "PASS"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : status.outdoor_recording_quality === "SENSOR_ONLY"
+                        ? "border-amber-200 bg-amber-50 text-amber-900"
+                        : "border-red-200 bg-red-50 text-red-800",
+                  )}>
+                    <p className="font-semibold">{status.outdoor_recording_quality === "PASS" ? "数据质量通过，可以进入离线建图" : status.outdoor_recording_quality === "SENSOR_ONLY" ? "传感器质量通过，但路线覆盖不足" : "数据质量未通过，请重新采集"}</p>
+                    <p className="mt-1">路程 {status.outdoor_recording_path_m?.toFixed(1) || "--"} m · 累计转角 {status.outdoor_recording_turn_deg?.toFixed(0) || "--"}° · 雷达丢包 {status.outdoor_recording_packet_loss_delta ?? "--"}</p>
+                  </div> : null}
                 </>}
                 {mappingWorkspace === "indoor" ? <div className="mt-5 rounded-xl border border-base bg-card/50 p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -1462,7 +1473,7 @@ function App() {
                   <MetaCard label="XT-16" value={status?.outdoor_recording_lidar_hz ? `${status.outdoor_recording_lidar_hz.toFixed(1)} Hz` : status?.lidar_online ? "在线" : "等待"} />
                   <MetaCard label="外部 IMU" value={status?.outdoor_recording_imu_hz ? `${status.outdoor_recording_imu_hz.toFixed(0)} Hz` : status?.imu_online ? "在线" : "随任务启动"} />
                   <MetaCard label="后端" value={status?.mapping_backend?.toUpperCase() || outdoorBackend.toUpperCase()} />
-                  <MetaCard label="原始包" value={status?.outdoor_recording_state === "starting" ? "校验中" : status?.outdoor_recording_state === "failed" ? "失败" : status?.outdoor_recording ? formatDataSize(status.outdoor_recording_size_bytes) : "空闲"} />
+                  <MetaCard label="原始包" value={status?.outdoor_recording_state === "starting" ? "校验中" : status?.outdoor_recording_state === "failed" ? "失败" : status?.outdoor_recording ? formatDataSize(status.outdoor_recording_size_bytes) : status?.outdoor_recording_quality === "PASS" ? "质量通过" : status?.outdoor_recording_quality === "SENSOR_ONLY" ? "路线不足" : status?.outdoor_recording_quality === "FAIL" ? "质量失败" : "空闲"} />
                 </div>}
                 <div className="mt-auto pt-4">
                   {presetPending ? <p className="text-sm text-accent-600">正在执行：{presetPending}</p> : <div className="h-5" />}

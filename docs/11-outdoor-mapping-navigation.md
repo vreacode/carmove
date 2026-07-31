@@ -59,6 +59,9 @@ GLIM 官方测试平台一致。
   rosbag；
 - `apps/nano-deploy/scripts/verify_outdoor_streams.py`：录制前同时验证
   XT-16/IMU 频率、字段、frame_id、点数与时间戳；
+- `apps/nano-deploy/scripts/analyze_outdoor_bag.py`：录制停止后自动检查
+  Topic 频率、时间戳、点数、雷达丢包、轮速路程、累计转角和起止静止段，
+  同时生成 `quality_report.json` 与 `quality_report.md`；
 - `apps/nano-deploy/scripts/benchmark_outdoor_backends.sh`：顺序运行
   GLIM/FAST-LIO2 A/B；
 - `apps/nano-deploy/scripts/summarize_outdoor_benchmark.py`：闭环与资源
@@ -91,6 +94,13 @@ A/B结果:   /home/nvidia/Desktop/wheeltec_ros2/benchmarks/outdoor/<运行时间
 7. 停车后再静止 5 秒，然后点击“停止原始数据记录”；
 8. 等待停止校验返回包大小与 Topic 计数后再断电；
 9. 不要同时启动 GLIM、FAST-LIO2 或室内建图。
+
+停止后网页会显示三级质量结论：
+
+- `PASS`：传感器完整，且路线不少于 120 秒、15 米、累计转角 45°，
+  起止静止段均不少于 5 秒；
+- `SENSOR_ONLY`：传感器数据合格，但路线覆盖不足，只适合链路测试；
+- `FAIL`：频率、frame、时间戳、点云字段、点数或雷达丢包未通过，建议重采。
 
 命令行等价操作：
 

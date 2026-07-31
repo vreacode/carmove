@@ -110,6 +110,10 @@ export type SystemStatus = {
   outdoor_recording_lidar_hz?: number | null;
   outdoor_recording_imu_hz?: number | null;
   outdoor_recording_error?: string | null;
+  outdoor_recording_quality?: "PASS" | "SENSOR_ONLY" | "FAIL" | null;
+  outdoor_recording_path_m?: number | null;
+  outdoor_recording_turn_deg?: number | null;
+  outdoor_recording_packet_loss_delta?: number | null;
   navigation_running?: boolean;
   exploration_running?: boolean;
   exploration_state?: string;
