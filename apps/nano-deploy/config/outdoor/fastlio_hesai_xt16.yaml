@@ -38,10 +38,12 @@
       det_range: 100.0
 
       # FAST-LIO defines these as the LiDAR pose in the IMU body frame.
-      # The values mirror the currently deployed top_akm_dl static TF:
-      # base_footprint/gyro_link -> laser.
+      # Deployed TFs:
+      #   base_footprint -> laser    = [0.25033, 0.00182, 0.15040], yaw +90 deg
+      #   base_footprint -> gyro_link = [0.01000, 0.00000, 0.44900]
+      # Therefore gyro_link -> laser is the translation below with yaw +90 deg.
       extrinsic_est_en: false
-      extrinsic_T: [0.25033, 0.00182, 0.15040]
+      extrinsic_T: [0.24033, 0.00182, -0.29860]
       extrinsic_R: [0.0, -1.0, 0.0,
                     1.0,  0.0, 0.0,
                     0.0,  0.0, 1.0]

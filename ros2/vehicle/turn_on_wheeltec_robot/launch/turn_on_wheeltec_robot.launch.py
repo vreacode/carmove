@@ -54,13 +54,6 @@ def generate_launch_description():
             name='base_to_link',
             arguments=['0', '0', '0.049','0', '0','0','base_footprint','base_link'],
     )
-    base_to_gyro = launch_ros.actions.Node(
-            package='tf2_ros', 
-            executable='static_transform_publisher', 
-            name='base_to_gyro',
-            arguments=['0', '0', '0','0', '0','0','base_footprint','gyro_link'],
-    )
-    
     imu_filter_node =  launch_ros.actions.Node(
         package='imu_filter_madgwick',
         executable='imu_filter_madgwick_node',
@@ -105,10 +98,8 @@ def generate_launch_description():
     ld.add_action(carto_slam_dec)
     ld.add_action(wheeltec_robot)
     ld.add_action(base_to_link)
-    ld.add_action(base_to_gyro)
     ld.add_action(joint_state_publisher_node)
     ld.add_action(imu_filter_node)    
     ld.add_action(robot_ekf)
 
     return ld
-

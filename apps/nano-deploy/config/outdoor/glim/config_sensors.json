@@ -50,12 +50,13 @@
     "imu_bias_noise": 1e-5,
     // LiDAR config
     "global_shutter_lidar": false,
-    // Initial XT-16/Yesense extrinsic converted from the vehicle's existing
-    // FAST-LIO convention. GLIM expects p_lidar = T_lidar_imu * p_imu.
+    // XT-16/H30 extrinsic derived from the deployed TF chain. GLIM expects
+    // p_lidar = T_lidar_imu * p_imu, i.e. the inverse of FAST-LIO's
+    // gyro_link -> laser transform.
     "T_lidar_imu": [
       -0.00182,
-      0.25033,
-      -0.15040,
+      0.24033,
+      0.29860,
       0.0,
       0.0,
       -0.70710678,

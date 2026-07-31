@@ -22,7 +22,12 @@ def generate_launch_description():
         # The base must consume the post-processed command. Nav2 publishes
         # raw commands to /cmd_vel_nav, velocity_smoother publishes /cmd_vel,
         # and collision_monitor gates the final /cmd_vel_safe stream.
-        remappings=[('/cmd_vel', '/cmd_vel_safe')],
+        remappings=[
+            ('/cmd_vel', '/cmd_vel_safe'),
+            # Keep the chassis-board IMU separate. The external H30 is the
+            # authoritative high-rate source on /imu/data_raw for outdoor LIO.
+            ('/imu/data_raw', '/imu/data_board'),
+        ],
         parameters=[{'usart_port_name': '/dev/ttyCH343USB0', # 大车串口；驱动实际读取此参数
                     'serial_baud_rate': 115200,
                     'robot_frame_id': 'base_footprint',
