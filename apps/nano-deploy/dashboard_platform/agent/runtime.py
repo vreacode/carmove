@@ -176,6 +176,9 @@ class ModelProcessManager:
             env = os.environ.copy()
             env.setdefault("PYTHONUNBUFFERED", "1")
             env.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+            ultralytics_config = self.settings.model_workdir / "dashboard_platform/runtime/ultralytics_config"
+            ultralytics_config.mkdir(parents=True, exist_ok=True)
+            env.setdefault("YOLO_CONFIG_DIR", str(ultralytics_config))
             self.process = await asyncio.create_subprocess_exec(
                 *command,
                 cwd=str(self.settings.model_workdir),

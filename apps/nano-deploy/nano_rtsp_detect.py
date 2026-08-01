@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import logging
 import time
+import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -61,6 +62,12 @@ except Exception:
 def parse_args():
     parser = argparse.ArgumentParser(description="RTSP inference with frame skipping on Jetson Nano")
     parser.add_argument("--weights", default="helmet.pt", help="model weights path")
+    parser.add_argument(
+        "--backend",
+        choices=("auto", "yolov5", "ultralytics"),
+        default="auto",
+        help="model runtime; auto inspects PyTorch checkpoint metadata",
+    )
     parser.add_argument("--source", default="rtsp://10.16.16.10:8554/video1", help="RTSP URL or video path")
     parser.add_argument("--vid-stride", type=int, default=3, help="process every Nth frame")
     parser.add_argument("--max-frames", type=int, default=0, help="stop after this many processed frames; 0 means no frame limit")
@@ -95,6 +102,51 @@ def parse_args():
     parser.add_argument("--parking-min-conf", type=float, default=0.5, help="minimum vehicle confidence")
     parser.add_argument("--parking-track-iou", type=float, default=0.3, help="IoU threshold for vehicle tracking")
     return parser.parse_args()
+
+
+def detect_model_backend(weights, requested="auto"):
+    if requested != "auto":
+        return requested
+    path = Path(weights)
+    if not path.is_file() or path.suffix.lower() != ".pt":
+        return "yolov5"
+    try:
+        with zipfile.ZipFile(path) as archive:
+            pickle_name = next(name for name in archive.namelist() if name.endswith("/data.pkl"))
+            checkpoint_metadata = archive.read(pickle_name)
+        if b"ultralytics.nn.tasks" in checkpoint_metadata:
+            return "ultralytics"
+    except (OSError, StopIteration, zipfile.BadZipFile):
+        pass
+    return "yolov5"
+
+
+class UltralyticsPredictor:
+    def __init__(self, weights, conf, iou, img_size, device, half):
+        from ultralytics import YOLO
+
+        self.model = YOLO(weights)
+        self.names = self.model.names
+        self.conf_thres = conf
+        self.iou_thres = iou
+        self.img_size = img_size
+        self.device = device or ("0" if torch.cuda.is_available() else "cpu")
+        self.half = bool(half and torch.cuda.is_available())
+        self.view_img = False
+
+    def infer(self, frame):
+        predict_args = dict(
+            source=frame,
+            imgsz=self.img_size,
+            conf=self.conf_thres,
+            iou=self.iou_thres,
+            device=self.device,
+            verbose=False,
+        )
+        if self.half:
+            predict_args["half"] = True
+        result = self.model.predict(**predict_args)[0]
+        return result.boxes.data
 
 
 def normalize_event_classes(value):
@@ -263,16 +315,23 @@ def main():
             cooldown_seconds=args.parking_cooldown,
         )
 
-    predictor = YOLOPredict(
-        args.weights,
-        "inference/output",
-        conf_thres=args.conf,
-        iou_thres=args.iou,
-        img_size=args.img_size,
-        device=args.device,
-        half=args.half,
-        vid_stride=args.vid_stride,
-    )
+    backend = detect_model_backend(args.weights, args.backend)
+    logging.info("model backend=%s weights=%s", backend, args.weights)
+    if backend == "ultralytics":
+        predictor = UltralyticsPredictor(
+            args.weights, args.conf, args.iou, args.img_size, args.device, args.half
+        )
+    else:
+        predictor = YOLOPredict(
+            args.weights,
+            "inference/output",
+            conf_thres=args.conf,
+            iou_thres=args.iou,
+            img_size=args.img_size,
+            device=args.device,
+            half=args.half,
+            vid_stride=args.vid_stride,
+        )
     predictor.view_img = args.view
 
     snapshot_dir = Path(args.snapshot_dir) if args.snapshot_dir else None
@@ -306,21 +365,28 @@ def main():
             else:
                 im0 = im0s.copy()
 
-            img = torch.from_numpy(img).to(predictor.device)
-            if webcam and img.ndimension() == 4:
-                img = img[0]
-            img = img.half() if predictor.half and predictor.device.type != "cpu" else img.float()
-            img /= 255.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
+            if backend == "ultralytics":
+                det = predictor.infer(im0)
+            else:
+                img = torch.from_numpy(img).to(predictor.device)
+                if webcam and img.ndimension() == 4:
+                    img = img[0]
+                img = img.half() if predictor.half and predictor.device.type != "cpu" else img.float()
+                img /= 255.0
+                if img.ndimension() == 3:
+                    img = img.unsqueeze(0)
 
-            pred = predictor.model(img, augment=False)[0]
-            pred = non_max_suppression(pred, predictor.conf_thres, predictor.iou_thres, classes=predictor.classes,
-                                       agnostic=predictor.agnostic_nms)
-            det = pred[0] if pred else None
-
-            if det is not None and len(det):
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                pred = predictor.model(img, augment=False)[0]
+                pred = non_max_suppression(
+                    pred,
+                    predictor.conf_thres,
+                    predictor.iou_thres,
+                    classes=predictor.classes,
+                    agnostic=predictor.agnostic_nms,
+                )
+                det = pred[0] if pred else None
+                if det is not None and len(det):
+                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
             events = filter_events(det, predictor.names, predictor.conf_thres, event_classes)
             events = apply_cooldown(events, args.min_event_interval, last_emit)

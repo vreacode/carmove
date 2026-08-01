@@ -1,0 +1,14 @@
+{
+  "id": "roadside",
+  "label": "Roadside Garbage + Vehicle",
+  "architecture": "YOLO26n detect",
+  "ultralytics_version": "8.4.114",
+  "input_size": 640,
+  "classes": {
+    "0": "garbage",
+    "1": "vehicle"
+  },
+  "weight": "models/roadside_yolo26n_mixed_v2.pt",
+  "size_bytes": 5363973,
+  "sha256": "31b1c6f713757472d4b9814b79a7ffd812175a4c1a88d796905518c58563609d"
+}
