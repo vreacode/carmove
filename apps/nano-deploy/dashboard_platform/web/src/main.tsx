@@ -3,6 +3,11 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import MobileCaptureConsole from "./MobileCaptureConsole";
 import "./styles.css";
+import "./desktop.css";
+import "./live.css";
+import "./refinement.css";
+import "./flclash-theme.css";
+import "./flclash-surfaces.css";
 
 function Root() {
   const [isMobile, setIsMobile] = React.useState(() => window.matchMedia("(max-width: 760px)").matches);

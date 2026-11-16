@@ -1,40 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
-  ArrowsPointingOutIcon,
   ArrowPathIcon,
   BoltIcon,
   ExclamationTriangleIcon,
   PauseCircleIcon,
   PlayCircleIcon,
   StopCircleIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
-  ChevronLeftIcon,
   ChevronRightIcon,
-  StopIcon,
-  SunIcon,
-  MoonIcon,
-  SwatchIcon,
   TrashIcon,
-} from "@heroicons/react/24/outline";
+} from "./components/FlClashIcons";
 import { Panel } from "./components/Panel";
+import { AlgorithmLibrary } from "./components/AlgorithmLibrary";
+import type { Algorithm } from "./algorithms";
 import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
-import { VideoStream } from "./components/VideoStream";
+import { LiveWorkspace } from "./components/LiveWorkspace";
 import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
+import { AnimatedNumber, DataMotionProvider } from "./components/DataMotion";
+import { ResourceTrends } from "./components/ResourceTrends";
+import { useResourceHistory } from "./hooks/useResourceHistory";
 import { API_BASE, apiFetch, classNames, clearToken, formatNumber, loadToken, saveToken, wsUrl } from "./lib";
-import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaItem, MediaStatus, NavigationState, SiyiCameraStatus, StreamStats, SystemStatus } from "./types";
+import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaItem, MediaStatus, NavigationState, SiyiCameraStatus, SystemStatus } from "./types";
 
 type LoginResponse = { token: string; username: string };
 
-const workspaceMeta: Record<SidebarTab, { eyebrow: string; title: string; description: string }> = {
-  live: { eyebrow: "LIVE OPERATIONS", title: "实时监控", description: "查看双光视频、模型状态与车辆即时操控。" },
-  navigation: { eyebrow: "MAP & NAVIGATION", title: "建图导航", description: "管理地图、建图流程与自主导航任务。" },
-  perception: { eyebrow: "MEDIA & INTELLIGENCE", title: "媒体与感知", description: "管理录像、拍照、检测事件与系统日志。" },
-  diagnostics: { eyebrow: "SYSTEM HEALTH", title: "系统诊断", description: "核对底盘链路、设备资源和控制模式。" },
+const workspaceMeta: Record<SidebarTab, { title: string; description: string }> = {
+  live: { title: "实时监控", description: "查看双光视频、模型状态与车辆即时操控。" },
+  navigation: { title: "建图导航", description: "管理地图、建图流程与自主导航任务。" },
+  perception: { title: "录像与记录", description: "查看录像、照片和检测记录。" },
+  algorithms: { title: "算法库", description: "选择模型或查看建图、导航算法。" },
+  diagnostics: { title: "系统诊断", description: "查看设备资源、底盘和传感器状态。" },
 };
 
-const workspaceTabs: SidebarTab[] = ["live", "navigation", "perception", "diagnostics"];
+const workspaceTabs: SidebarTab[] = ["live", "navigation", "perception", "algorithms", "diagnostics"];
 
 function tabFromHash(hash: string): SidebarTab {
   const candidate = hash.replace(/^#/, "") as SidebarTab;
@@ -103,7 +101,9 @@ function formatDataSize(bytes?: number) {
 function App() {
   const [token, setToken] = useState(loadToken());
   const [activeTab, setActiveTab] = useState<SidebarTab>(() => tabFromHash(window.location.hash));
+  const [navigationRevision, setNavigationRevision] = useState(0);
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const resourceHistory = useResourceHistory(status);
   const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
   const [gimbalPending, setGimbalPending] = useState(false);
   const [logs, setLogs] = useState<LogItem[]>([]);
@@ -153,8 +153,30 @@ function App() {
   const [useFallback, setUseFallback] = useState(false);
   const cruiseSteeringRequestRef = useRef<Promise<void> | null>(null);
   const cruiseSteeringDesiredRef = useRef<"center" | "left" | "right">("center");
+  const modelSelectionEditedRef = useRef(false);
+
+  function chooseModel(modelId: string) {
+    modelSelectionEditedRef.current = true;
+    setSelectedModel(modelId);
+  }
+
+  function loadAlgorithmModel(modelId: string) {
+    chooseModel(modelId);
+    setParkingEnabled(false);
+    setVideoSourceMode(status?.model_status?.running && status.model_status.model_id === modelId ? "annotated" : "visible_raw");
+    selectTab("live");
+  }
+
+  function openAlgorithmPipeline(algorithm: Algorithm) {
+    if (algorithm.category === "mapping" && !status?.mapping_running) {
+      setMappingWorkspace(algorithm.mappingBackend === "slam_toolbox" ? "indoor" : "outdoor");
+      if (algorithm.mappingBackend === "glim" || algorithm.mappingBackend === "fastlio2") setOutdoorBackend(algorithm.mappingBackend);
+    }
+    selectTab("navigation");
+  }
 
   function selectTab(tab: SidebarTab) {
+    setNavigationRevision((revision) => revision + 1);
     setActiveTab(tab);
     if (window.location.hash !== `#${tab}`) {
       window.history.pushState({ workspace: tab }, "", `#${tab}`);
@@ -220,7 +242,7 @@ function App() {
       const payload = JSON.parse(event.data) as SystemStatus;
       setStatus(payload);
       if (payload.current_video_source) setSource((current) => current || payload.current_video_source || "");
-      if (payload.current_model) setSelectedModel(payload.current_model);
+      if (payload.current_model && !modelSelectionEditedRef.current) setSelectedModel(payload.current_model);
       setVideoSourceMode((current) => (
         payload.current_video_mode === "visible_raw" &&
         current === "annotated" &&
@@ -252,7 +274,7 @@ function App() {
         if (cancelled) return;
         setStatus(payload);
         if (payload.current_video_source) setSource((current) => current || payload.current_video_source || "");
-        if (payload.current_model) setSelectedModel(payload.current_model);
+        if (payload.current_model && !modelSelectionEditedRef.current) setSelectedModel(payload.current_model);
         if (payload.current_map_name) {
           setSelectedMapName((current) => current || payload.current_map_name || "");
           setMapNameInput((current) => current || payload.current_map_name || "");
@@ -380,9 +402,9 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!token) return;
+      if (!token || activeTab !== "live" || event.altKey || event.ctrlKey || event.metaKey || document.querySelector("dialog[open]")) return;
       const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (target?.closest("input, textarea, select, button, a, summary, [contenteditable=true]")) return;
       if (event.repeat) return;
       const keyMap: Record<string, string> = {
         w: "forward",
@@ -398,7 +420,7 @@ function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [token, speed]);
+  }, [token, speed, activeTab]);
 
   async function login() {
     try {
@@ -949,6 +971,7 @@ function App() {
   }
 
   function logout() {
+    modelSelectionEditedRef.current = false;
     clearToken();
     setToken("");
     setStatus(null);
@@ -957,31 +980,35 @@ function App() {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <div className="w-full max-w-md rounded-xl border border-base bg-panel/95 p-8 shadow-panel backdrop-blur">
+      <div className="dashboard-workspace workspace-login">
+        <div className="workspace-login-card">
           <div className="mb-8">
-            <p className="text-sm uppercase tracking-[0.35em] text-accent-500">Nano Dashboard</p>
+            <p className="text-sm uppercase tracking-[0.15em] text-accent-600">CarMove / Console</p>
             <h1 className="mt-3 text-3xl font-semibold text-primary">登录控制台</h1>
             <p className="mt-2 text-sm text-muted">输入账号后进入系统。</p>
           </div>
           <div className="space-y-4">
             <input
               className="w-full rounded-xl border border-base bg-card px-4 py-3 text-secondary outline-none ring-accent-300 transition focus:ring-2"
-              placeholder="Username"
+              placeholder="用户名"
+              aria-label="用户名"
+              autoComplete="username"
               value={loginForm.username}
               onChange={(event) => setLoginForm((prev) => ({ ...prev, username: event.target.value }))}
             />
             <input
               type="password"
               className="w-full rounded-xl border border-base bg-card px-4 py-3 text-secondary outline-none ring-accent-300 transition focus:ring-2"
-              placeholder="Password"
+              placeholder="密码"
+              aria-label="密码"
+              autoComplete="current-password"
               value={loginForm.password}
               onChange={(event) => setLoginForm((prev) => ({ ...prev, password: event.target.value }))}
             />
             <button
               onClick={login}
               disabled={loginPending}
-              className="w-full rounded-xl bg-gradient-to-r from-accent-400 to-cyan-300 px-4 py-3 font-semibold text-primary transition hover:opacity-90"
+              className="w-full rounded-lg bg-accent-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-accent-700 disabled:opacity-60"
             >
               {loginPending ? "登录中..." : "登录"}
             </button>
@@ -993,292 +1020,49 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(125,211,252,.24),transparent_30%),linear-gradient(135deg,#edf5ff_0%,#f8fbff_48%,#e9f2fb_100%)] text-primary">
+    <div className={classNames("dashboard-workspace", activeTab === "live" && "is-live")}>
       <SidebarMenu activeTab={activeTab} onChange={selectTab} status={status} />
-      <main className="min-w-0 flex-1 px-5 py-5 lg:px-8">
-      <header className="mb-6 flex flex-col gap-4 rounded-lg border border-base/70 bg-panel p-6 lg:flex-row lg:items-center lg:justify-between">
+      <main className="workspace-main">
+      <DataMotionProvider revision={`${activeTab}:${navigationRevision}`}>
+      <div className="workspace-topbar">
+        <div className="workspace-breadcrumb"><span>工作空间</span><ChevronRightIcon aria-hidden="true" /><strong>{activeWorkspace.title}</strong></div>
+        <div className="workspace-utilities"><ThemeToggle /><span className="utility-divider" /><button onClick={logout} className="workspace-logout">退出登录</button></div>
+      </div>
+      <div className="workspace-content">
+      <header className="workspace-heading">
         <div>
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-accent-600">{activeWorkspace.eyebrow}</span>
-            <span className="rounded bg-page px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-muted">NANO</span>
-          </div>
           <div className="mt-2 flex items-end gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-primary">{activeWorkspace.title}</h1>
-            <span className="hidden pb-0.5 text-xs text-muted lg:inline">Vehicle Intelligence Console</span>
+            <h1 className="workspace-title">{activeWorkspace.title}</h1>
+
           </div>
-          <p className="mt-1 text-[13px] text-muted">{activeWorkspace.description}</p>
+          <p className="workspace-description">{activeWorkspace.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone={status?.agent_online ? "good" : "danger"}>设备 {status?.agent_online ? "在线" : "离线"}</StatusPill>
-          <StatusPill tone={videoState === "connected" ? "good" : videoState === "failed" ? "danger" : "warn"}>视频 {videoState === "connected" ? "已连接" : videoState === "failed" ? "已断开" : "重连中"}</StatusPill>
-          <StatusPill tone={status?.mapping_running ? "good" : "neutral"}>建图 {status?.mapping_running ? "运行中" : "空闲"}</StatusPill>
-          <StatusPill tone={status?.navigation_running ? "good" : "neutral"}>导航 {status?.navigation_running ? "运行中" : "空闲"}</StatusPill>
-          <div className="ml-2 h-4 w-px bg-divider"></div>
-          <ThemeToggle />
-          <button onClick={logout} className="rounded-md border border-base bg-panel px-3 py-1.5 text-[13px] font-medium text-tertiary hover:bg-card hover:text-primary transition-colors">
-            退出登录
-          </button>
+
+          {status?.mapping_running && <StatusPill tone="good">建图中</StatusPill>}
+          {status?.navigation_running && <StatusPill tone="good">导航中</StatusPill>}
+
         </div>
       </header>
 
       <div className="space-y-5">
-        {activeTab === "live" ? <div id="section-live" className="grid gap-5 xl:grid-cols-12">
-          <div className="h-full xl:col-span-8">
-            <Panel
-              title="实时视频 (双光融合)"
-              subtitle="左侧为可见光/检测结果，右侧为红外流。"
-              className="h-full min-h-[780px] flex flex-col"
-              right={
-                <div className="flex items-center gap-2">
-                  <div className="flex overflow-hidden rounded-md border border-base bg-card text-[13px] text-tertiary font-medium shadow-sm">
-                    <button
-                      onClick={() => setVideoSourceMode("visible_raw")}
-                      className={classNames("px-3 py-1.5 transition-colors", videoSourceMode === "visible_raw" ? "bg-panel text-accent-600 shadow-sm" : "hover:bg-page")}
-                    >
-                      主屏: 可见光
-                    </button>
-                    <div className="w-px bg-slate-200"></div>
-                    <button
-                      onClick={() => setVideoSourceMode("annotated")}
-                      disabled={!status?.model_status?.running}
-                      className={classNames(
-                        "px-3 py-1.5 transition-colors",
-                        videoSourceMode === "annotated" ? "bg-panel text-accent-600 shadow-sm" : "hover:bg-page",
-                        !status?.model_status?.running && "cursor-not-allowed opacity-50",
-                      )}
-                    >
-                      主屏: 检测结果
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => setUseFallback((prev) => !prev)}
-                    className="rounded-md border border-base bg-panel px-3 py-1.5 text-[13px] text-tertiary hover:bg-card transition-colors shadow-sm"
-                  >
-                    {useFallback ? "恢复 WebRTC" : "启用低延时退回"}
-                  </button>
-                </div>
-              }
-            >
-              <div className="grid grid-cols-2 gap-3 flex-1 min-h-[300px]">
-                <VideoStream
-                  mode={videoSourceMode}
-                  token={token}
-                  useFallback={useFallback}
-                  onStateChange={setVideoState}
-                />
-                <VideoStream
-                  mode="ir_raw"
-                  token={token}
-                  useFallback={useFallback}
-                />
-              </div>
-              <div className="mt-4 rounded-xl border border-base bg-card/50 p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-disabled">模型联动</p>
-                    <p className="mt-1 text-sm text-muted">切换模型并查看当前推理进程状态。</p>
-                  </div>
-                  <StatusPill tone={status?.model_status?.running ? "good" : "neutral"}>
-                    {status?.model_status?.running ? "running" : "stopped"}
-                  </StatusPill>
-                </div>
-                <div className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr_auto]">
-                  <select
-                    value={selectedModel}
-                    onChange={(event) => setSelectedModel(event.target.value)}
-                    className="w-full rounded-xl border border-base bg-panel px-4 py-3 text-secondary shadow-sm"
-                  >
-                    {(status?.available_models ?? []).map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={source}
-                    onChange={(event) => setSource(event.target.value)}
-                    placeholder="RTSP source"
-                    className="w-full rounded-xl border border-base bg-panel px-4 py-3 text-secondary shadow-sm"
-                  />
-                  <div className="grid grid-cols-3 gap-3 xl:min-w-[300px]">
-                    <ActionButton icon={<PlayCircleIcon className="h-5 w-5" />} label={modelPending === "start" ? "启动中..." : "Start"} disabled={!!modelPending} onClick={() => void runModel("start")} />
-                    <ActionButton icon={<ArrowPathIcon className="h-5 w-5" />} label={modelPending === "restart" ? "重启中..." : "Restart"} disabled={!!modelPending} onClick={() => void runModel("restart")} />
-                    <ActionButton icon={<PauseCircleIcon className="h-5 w-5" />} label={modelPending === "stop" ? "停止中..." : "Stop"} disabled={!!modelPending} onClick={() => void stopModel()} />
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-3 md:grid-cols-4">
-                  <MetaCard label="当前模型" value={status?.model_status?.model_id || "--"} />
-                  <MetaCard label="进程状态" value={status?.model_status?.running ? "running" : "stopped"} />
-                  <MetaCard label="PID" value={status?.model_status?.pid ? String(status.model_status.pid) : "--"} />
-                  <MetaCard label="启动时间" value={status?.model_status?.started_at ? new Date(status.model_status.started_at).toLocaleTimeString() : "--"} />
-                </div>
-                <div className="mt-3 rounded-xl border border-base bg-panel/70 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-secondary">
-                      <input
-                        type="checkbox"
-                        checked={parkingEnabled}
-                        onChange={(event) => setParkingEnabled(event.target.checked)}
-                        className="h-4 w-4 rounded border-base accent-accent-500"
-                      />
-                      启用违停判定
-                    </label>
-                    <span className="text-xs text-muted">车辆进入 ROI 并持续停留后生成事件</span>
-                  </div>
-                  {parkingEnabled && (
-                    <div className="mt-3 grid gap-3 md:grid-cols-[1fr_150px]">
-                      <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted">
-                        禁停区域 ROI
-                        <input
-                          value={parkingZoneInput}
-                          onChange={(event) => setParkingZoneInput(event.target.value)}
-                          placeholder="x1, y1, x2, y2"
-                          aria-label="禁停区域归一化坐标"
-                          className="mt-1 w-full rounded-lg border border-base bg-card px-3 py-2 text-sm normal-case tracking-normal text-secondary outline-none ring-accent-300 transition focus:ring-2"
-                        />
-                      </label>
-                      <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted">
-                        停留秒数
-                        <input
-                          type="number"
-                          min="0"
-                          max="3600"
-                          step="0.5"
-                          value={parkingDwellInput}
-                          onChange={(event) => setParkingDwellInput(event.target.value)}
-                          aria-label="违停停留秒数"
-                          className="mt-1 w-full rounded-lg border border-base bg-card px-3 py-2 text-sm normal-case tracking-normal text-secondary outline-none ring-accent-300 transition focus:ring-2"
-                        />
-                      </label>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Panel>
-          </div>
-
-          <div className="h-full xl:col-span-4">
-            <Panel
-              title="即时操控"
-              subtitle="执行车辆即时动作与安全控制。"
-              className="h-full min-h-[780px]"
-            >
-              <div className="mb-4 grid grid-cols-2 gap-3">
-                <StatCard label="控制模式" value={status?.motion_state?.mode === "real" ? "real" : "dry-run"} />
-                <StatCard label="控制状态" value={status?.motion_state?.armed ? "已解锁" : "已锁定"} />
-                <StatCard label="人工接管" value={status?.motion_state?.manual_override ? "enabled" : status?.motion_state?.nav_lockout ? "nav lockout" : "idle"} />
-                <StatCard label="速度档位" value={speed} />
-              </div>
-              <div className="mb-4 flex gap-2">
-                {speedLevels.map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => setSpeed(item)}
-                    disabled={cruiseActive}
-                    className={classNames(
-                      "rounded-full px-3 py-1.5 text-sm capitalize transition",
-                      speed === item ? "bg-accent-300 text-primary" : "border border-base bg-panel text-tertiary",
-                      cruiseActive && "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-              <div className="mb-4 grid grid-cols-2 gap-3">
-                <ActionButton
-                  icon={<BoltIcon className="h-5 w-5" />}
-                  label={armPending ? "处理中..." : status?.motion_state?.armed ? "锁定控制" : "解锁控制"}
-                  disabled={armPending || !status?.motion_state}
-                  onClick={() => void setControlArm(!status?.motion_state?.armed)}
-                />
-                <ActionButton
-                  icon={<BoltIcon className="h-5 w-5" />}
-                  label={overridePending ? "处理中..." : status?.motion_state?.manual_override ? "取消人工接管" : "启用人工接管"}
-                  disabled={
-                    overridePending ||
-                    !status?.motion_state ||
-                    (!status?.navigation_running && !status?.motion_state?.manual_override) ||
-                    (!!status?.motion_state && status.motion_state.require_manual_arm && !status.motion_state.armed && !status.motion_state.manual_override)
-                  }
-                  onClick={() => void setManualOverride(!status?.motion_state?.manual_override)}
-                />
-              </div>
-              <div className="mb-4 rounded-xl border border-base bg-card/50 px-4 py-3 text-sm text-tertiary">
-                {controlHint}
-              </div>
-              <div className="rounded-xl border border-base bg-card/50 p-5">
-                <div className="mb-5 rounded-2xl border border-accent-200 bg-gradient-to-br from-accent-50 to-card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-primary">匀速前进</p>
-                      <p className="mt-1 text-xs leading-5 text-tertiary">底盘持续保持当前速度档位前进，只需按住左右键修正方向。</p>
-                    </div>
-                    <StatusPill tone={cruiseActive ? "good" : "neutral"}>{cruiseActive ? (cruiseSteering === "center" ? "直行中" : cruiseSteering === "left" ? "左修正" : "右修正") : "待启动"}</StatusPill>
-                  </div>
-                  <button
-                    onClick={() => void (cruiseActive ? stopCruise() : startCruise())}
-                    disabled={cruisePending !== "" || !status?.motion_state || (!cruiseActive && manualControlBlocked)}
-                    className={classNames(
-                      "mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition",
-                      cruiseActive ? "bg-panel text-danger ring-1 ring-red-200 hover:bg-red-50" : "bg-accent-300 text-primary hover:bg-accent-400",
-                      (cruisePending !== "" || !status?.motion_state || (!cruiseActive && manualControlBlocked)) && "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    {cruisePending === "start" ? "正在启动..." : cruisePending === "stop" ? "正在停车..." : cruiseActive ? "停止匀速前进" : "开始匀速前进"}
-                  </button>
-                  {cruiseActive && (
-                    <div className="mt-4 grid grid-cols-3 gap-2">
-                      <CruiseDirectionButton icon={<ChevronLeftIcon className="h-6 w-6" />} title="按住左修正" onPress={() => void steerCruise("left")} onRelease={() => void steerCruise("center")} disabled={cruisePending === "start" || cruisePending === "stop"} />
-                      <CruiseDirectionButton icon={<ChevronUpIcon className="h-6 w-6" />} title="直行" onPress={() => void steerCruise("center")} onRelease={() => void steerCruise("center")} disabled={cruisePending === "start" || cruisePending === "stop"} active={cruiseSteering === "center"} />
-                      <CruiseDirectionButton icon={<ChevronRightIcon className="h-6 w-6" />} title="按住右修正" onPress={() => void steerCruise("right")} onRelease={() => void steerCruise("center")} disabled={cruisePending === "start" || cruisePending === "stop"} />
-                    </div>
-                  )}
-                </div>
-                <div className="mx-auto w-fit grid grid-cols-3 gap-2">
-                  <div />
-                  <ControlButton icon={<ChevronUpIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("forward")} title="前进" />
-                  <div />
-                  <ControlButton icon={<ChevronLeftIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("left")} title="左转" />
-                  <ControlButton icon={<StopIcon className="h-7 w-7" />} disabled={controlPending || cruisePending !== ""} onClick={() => void (cruiseActive ? stopCruise() : sendControl("stop"))} title="停止" variant="danger" />
-                  <ControlButton icon={<ChevronRightIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("right")} title="右转" />
-                  <div />
-                  <ControlButton icon={<ChevronDownIcon className="h-7 w-7" />} disabled={controlPending || cruiseActive || manualControlBlocked} onClick={() => void sendControl("backward")} title="后退" />
-                  <div />
-                </div>
-                <button
-                  onClick={() => void emergencyStop()}
-                  disabled={controlPending}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-danger px-4 py-3 font-semibold text-white"
-                >
-                  <ExclamationTriangleIcon className="h-5 w-5" />
-                  急停
-                </button>
-              </div>
-              <div className="mt-4 rounded-xl border border-base bg-card/50 p-4 text-sm text-tertiary">
-                <InfoRow label="最近命令" value={status?.motion_state?.last_command ? `${status.motion_state.last_command.command}/${status.motion_state.last_command.speed}` : "--"} />
-                <InfoRow
-                  label="最近 Twist"
-                  value={
-                    status?.motion_state?.last_command
-                      ? `x=${status.motion_state.last_command.linear_x.toFixed(3)} z=${status.motion_state.last_command.angular_z.toFixed(3)}`
-                      : "--"
-                  }
-                />
-                <InfoRow label="状态" value={`${commandState}${status?.motion_state?.last_command ? ` / ${status.motion_state.last_command.dry_run ? "dry-run" : "real publish"}` : ""}`} />
-              </div>
-            </Panel>
-          </div>
-        </div> : null}
+        {activeTab === "algorithms" ? <AlgorithmLibrary status={status} pending={!!modelPending} onLoadModel={loadAlgorithmModel} onOpenPipeline={openAlgorithmPipeline} /> : null}
+        {activeTab === "live" ? <LiveWorkspace
+          token={token} status={status} error={error} resourceHistory={resourceHistory}
+          video={{ mode: videoSourceMode, setMode: setVideoSourceMode, useFallback, toggleFallback: () => setUseFallback((prev) => !prev), onStateChange: setVideoState }}
+          model={{ selected: selectedModel, choose: chooseModel, source, setSource, pending: modelPending, run: (action) => void runModel(action), stop: () => void stopModel(), parkingEnabled, setParkingEnabled, parkingZone: parkingZoneInput, setParkingZone: setParkingZoneInput, parkingDwell: parkingDwellInput, setParkingDwell: setParkingDwellInput }}
+          control={{ speed, setSpeed, pending: controlPending, armPending, overridePending, cruisePending, cruiseActive, cruiseSteering, blocked: manualControlBlocked, hint: controlHint, commandState, send: (command) => void sendControl(command), setArmed: (armed) => void setControlArm(armed), setOverride: (enabled) => void setManualOverride(enabled), startCruise: () => void startCruise(), stopCruise: () => void stopCruise(), steerCruise: (direction) => void steerCruise(direction), emergencyStop: () => void emergencyStop() }}
+        /> : null}
 
         {activeTab === "navigation" ? <div id="section-navigation" className="grid gap-5 xl:grid-cols-12">
           <div className="h-full xl:col-span-4">
-            <Panel title="建图与导航" subtitle="一键启动流程，RViz 会自动打开。" className="h-full min-h-[560px]">
+            <Panel title="建图与导航" subtitle="选择地图与建图方式。" className="h-full min-h-[560px]">
               <div className="flex h-full flex-col">
                 <div className="mb-5 grid grid-cols-2 gap-4">
                   <StatCard label="当前地图" value={status?.current_map_name || selectedMapName || "--"} />
-                  <StatCard label="Mapping" value={status?.mapping_running ? "running" : "idle"} />
-                  <StatCard label="Navigation" value={status?.navigation_running ? "running" : "idle"} />
+                  <StatCard label="建图状态" value={status?.mapping_running ? "运行中" : "未运行"} />
+                  <StatCard label="导航状态" value={status?.navigation_running ? "运行中" : "未运行"} />
                   <StatCard label="自主探索" value={status?.exploration_running ? status.exploration_state || "running" : status?.exploration_state || "idle"} />
                 </div>
                 <div className="mb-5 grid grid-cols-2 rounded-xl border border-base bg-panel p-1">
@@ -1371,10 +1155,10 @@ function App() {
                 </div>
                 {mappingWorkspace === "indoor" ? <>
                   <div className="mt-5 grid grid-cols-2 gap-4">
-                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_mapping" ? "正在启动建图与 RViz..." : "启动建图 · 自动命名"} disabled={!!presetPending} onClick={() => void startMappingWithTimestamp()} primary wide />
-                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_exploration" ? "正在启动自主探索..." : "自主建图 · 前沿探索"} disabled={!!presetPending} onClick={() => void startExplorationWithTimestamp()} />
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_mapping" ? "正在启动建图与 RViz..." : "启动建图"} disabled={!!presetPending} onClick={() => void startMappingWithTimestamp()} primary wide />
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_exploration" ? "正在启动自主探索..." : "自主探索"} disabled={!!presetPending} onClick={() => void startExplorationWithTimestamp()} />
                     <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "save_map" ? "保存中..." : "保存地图"} disabled={!!presetPending} onClick={() => void runPreset("save_map")} />
-                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_navigation" ? "启动中..." : "启动导航 · 自动 RViz"} disabled={!!presetPending} onClick={() => void runPreset("start_navigation")} />
+                    <ActionButton icon={<BoltIcon className="h-5 w-5" />} label={presetPending === "start_navigation" ? "启动中..." : "启动导航"} disabled={!!presetPending} onClick={() => void runPreset("start_navigation")} />
                     <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_mapping" ? "停止中..." : "停止建图"} disabled={!!presetPending} onClick={() => void runPreset("stop_mapping")} />
                     <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_exploration" ? "停止中..." : "停止自主建图"} disabled={!!presetPending} onClick={() => void runPreset("stop_exploration")} />
                     <ActionButton icon={<StopCircleIcon className="h-5 w-5" />} label={presetPending === "stop_navigation" ? "停止中..." : "停止导航"} disabled={!!presetPending} onClick={() => void runPreset("stop_navigation")} />
@@ -1564,19 +1348,10 @@ function App() {
         </div> : null}
 
 
-        {activeTab === "diagnostics" ? <div id="section-diagnostics">
+        {activeTab === "diagnostics" ? <div id="section-diagnostics" className="space-y-5">
+        <ResourceTrends status={status} samples={resourceHistory} />
         <Panel title="系统与底盘状态" subtitle="查看系统资源、底盘在线状态与控制模式。">
-          <div className="grid gap-4 xl:grid-cols-4">
-            <div className="rounded-xl border border-base bg-card/50 p-4">
-              <p className="mb-3 text-xs uppercase tracking-[0.18em] text-disabled">系统资源</p>
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard label="CPU" value={formatNumber(status?.cpu_percent)} />
-                <StatCard label="Memory" value={formatNumber(status?.memory_percent)} />
-                <StatCard label="GPU" value={formatNumber(status?.gpu_percent)} />
-                <StatCard label="Heartbeat" value={status?.last_heartbeat ? new Date(status.last_heartbeat).toLocaleTimeString() : "--"} />
-              </div>
-            </div>
-
+          <div className="diagnostic-status-grid">
             <div className="rounded-xl border border-base bg-card/50 p-4">
               <p className="mb-3 text-xs uppercase tracking-[0.18em] text-disabled">底盘在线状态</p>
               <div className="grid grid-cols-2 gap-3">
@@ -1699,12 +1474,12 @@ function App() {
         </div> : null}
 
         {activeTab === "perception" ? <div id="section-perception" className="grid gap-5 xl:grid-cols-12">
-          <Panel title="媒体与记录" subtitle="管理录像、拍照与 AI 检测历史记录。" className="h-full xl:col-span-5 flex flex-col">
+          <Panel title="媒体与记录" subtitle="查看录像、照片与检测记录。" className="h-full xl:col-span-5 flex flex-col">
             <div className="mb-4 grid grid-cols-2 gap-3">
               <StatCard label="录像状态" value={mediaStatus?.recording_running ? "recording" : "idle"} />
-              <StatCard label="记录总数" value={String(mediaItems.length)} />
+              <StatCard label="记录总数" value={String(mediaItems.length)} animate />
             </div>
-            
+
             {/* Tab Header */}
             <div className="mb-4 flex border-b border-divider">
               <button
@@ -1856,6 +1631,8 @@ function App() {
         </div> : null}
 
       </div>
+      </div>
+      </DataMotionProvider>
       </main>
     </div>
   );
@@ -1867,12 +1644,12 @@ function ActionButton({ icon, label, onClick, disabled = false, primary = false,
       onClick={onClick}
       disabled={disabled}
       className={classNames(
-        "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[13px] font-medium shadow-sm transition-all",
+        "workspace-action flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[13px] font-medium transition-colors",
         wide && "col-span-2 min-h-[46px]",
         disabled
           ? "cursor-not-allowed border-base bg-card text-disabled opacity-50"
           : primary
-            ? "border-accent-600 bg-accent-600 text-white shadow-md hover:-translate-y-0.5 hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+            ? "border-accent-600 bg-accent-600 text-white hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
             : "border-base bg-panel text-secondary hover:bg-card hover:text-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/40",
       )}
     >
@@ -1882,73 +1659,11 @@ function ActionButton({ icon, label, onClick, disabled = false, primary = false,
   );
 }
 
-function ControlButton({ icon, title, onClick, disabled = false, variant = "default" }: { icon: ReactNode; title: string; onClick: () => void; disabled?: boolean; variant?: "default" | "danger" }) {
-  return (
-    <button
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-      className={classNames(
-        "flex h-16 w-16 items-center justify-center rounded-xl border shadow-sm transition-all active:scale-90",
-        disabled
-          ? "cursor-not-allowed border-base bg-card text-disabled opacity-60"
-          : variant === "danger"
-            ? "border-red-200 bg-panel text-red-500 hover:border-red-400 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500/40"
-            : "border-base bg-panel text-secondary hover:border-accent-300 hover:bg-accent-50 hover:text-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/40",
-      )}
-    >
-      {icon}
-    </button>
-  );
-}
-
-function CruiseDirectionButton({
-  icon,
-  title,
-  onPress,
-  onRelease,
-  disabled = false,
-  active = false,
-}: {
-  icon: ReactNode;
-  title: string;
-  onPress: () => void;
-  onRelease: () => void;
-  disabled?: boolean;
-  active?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      style={{ touchAction: "none" }}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
-        onPress();
-      }}
-      onPointerUp={(event) => {
-        event.preventDefault();
-        onRelease();
-      }}
-      onPointerCancel={onRelease}
-      className={classNames(
-        "flex h-14 items-center justify-center rounded-xl border text-secondary transition-all active:scale-95",
-        active ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel hover:border-accent-300 hover:bg-accent-50 hover:text-accent-600",
-        disabled && "cursor-not-allowed opacity-50",
-      )}
-    >
-      {icon}
-    </button>
-  );
-}
-
 function StatusPill({ tone, children }: { tone: "good" | "warn" | "danger" | "neutral"; children: ReactNode }) {
   return (
     <span
       className={classNames(
-        "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium tracking-wide",
+        "workspace-status",
         tone === "good" && "border-emerald-200 bg-emerald-50 text-emerald-700",
         tone === "warn" && "border-amber-200 bg-amber-50 text-amber-700",
         tone === "danger" && "border-rose-200 bg-rose-50 text-rose-700",
@@ -1971,57 +1686,46 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function MetaCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-base bg-card/50 p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted">{label}</p>
+    <div className="workspace-meta">
+      <p className="metric-label">{label}</p>
       <p className="mt-1 truncate text-[13px] font-semibold text-primary" title={value}>{value}</p>
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, animate = false }: { label: string; value: string; animate?: boolean }) {
   return (
-    <div className="rounded-lg border-l-2 border-l-accent-400 border-y border-r border-y-slate-200 border-r-slate-200 bg-panel p-3 shadow-sm">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted">{label}</p>
-      <p className="mt-1 truncate text-base font-semibold text-primary">{value}</p>
+    <div className="workspace-stat">
+      <p className="metric-label">{label}</p>
+      <p className="mt-1 truncate text-base font-semibold text-primary">{animate ? <AnimatedNumber value={Number(value)} /> : value}</p>
     </div>
   );
 }
 
 const THEMES = [
-  { id: "light", label: "浅色控制台", icon: SunIcon },
-  { id: "dark", label: "暗黑工业风", icon: MoonIcon },
-  { id: "warm", label: "低反差暖灰", icon: SwatchIcon },
+  { id: "system", label: "跟随系统" },
+  { id: "light", label: "浅色" },
+  { id: "dark", label: "深色" },
 ] as const;
 
 function ThemeToggle() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("app-theme") || "light");
-
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("app-theme");
+    return saved === "dark" || saved === "light" || saved === "system" ? saved : "system";
+  });
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => document.documentElement.setAttribute("data-theme", theme === "system" ? (query.matches ? "dark" : "light") : theme);
+    apply();
     localStorage.setItem("app-theme", theme);
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
   }, [theme]);
-
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-base bg-card p-1 shadow-sm">
-      {THEMES.map((t) => {
-        const Icon = t.icon;
-        const isActive = theme === t.id;
-        return (
-          <button
-            key={t.id}
-            onClick={() => setTheme(t.id)}
-            title={t.label}
-            className={classNames(
-              "rounded p-1.5 transition-colors",
-              isActive ? "bg-panel text-accent-500 shadow-sm" : "text-tertiary hover:bg-base/50"
-            )}
-          >
-            <Icon className="h-4 w-4" />
-          </button>
-        );
-      })}
-    </div>
-  );
+  return <label className="theme-selector"><span>外观</span>
+    <select aria-label="外观" value={theme} onChange={(event) => setTheme(event.target.value)}>
+      {THEMES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+    </select>
+  </label>;
 }
 
 export default App;

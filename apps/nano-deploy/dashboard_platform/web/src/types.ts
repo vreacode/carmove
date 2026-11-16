@@ -61,12 +61,16 @@ export type BaseStatus = {
 export type BatteryStatus = {
   available: boolean;
   voltage?: number | null;
+  raw_voltage?: number | null;
+  recent_min_voltage?: number | null;
   percentage?: number | null;
   charging?: boolean | null;
   charging_current?: number | null;
   source?: string;
   updated_at?: string | null;
   low?: boolean;
+  sag_detected?: boolean;
+  warning?: string | null;
   error?: string | null;
 };
 

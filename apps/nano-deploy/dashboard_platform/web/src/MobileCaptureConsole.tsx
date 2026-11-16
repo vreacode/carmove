@@ -18,7 +18,7 @@ import {
   StopCircleIcon,
   TrashIcon,
   WifiIcon,
-} from "@heroicons/react/24/outline";
+} from "./components/FlClashIcons";
 import { VideoStream } from "./components/VideoStream";
 import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
 import { API_BASE, apiFetch, clearToken, loadToken, saveToken, wsUrl } from "./lib";
@@ -276,6 +276,7 @@ export default function MobileCaptureConsole() {
   const [toast, setToast] = useState("");
   const [cruiseSpeed, setCruiseSpeed] = useState<(typeof cruiseSpeeds)[number]>("low");
   const [cruisePending, setCruisePending] = useState<"prepare" | "start" | "stop" | "">("");
+  const [emergencyPending, setEmergencyPending] = useState(false);
   const cruiseSteeringRequestRef = useRef<Promise<void> | null>(null);
   const cruiseSteeringDesiredRef = useRef<"center" | "left" | "right">("center");
 
@@ -543,6 +544,21 @@ export default function MobileCaptureConsole() {
     }
   }
 
+  async function emergencyStop() {
+    cruiseSteeringDesiredRef.current = "center";
+    setEmergencyPending(true);
+    setError("");
+    try {
+      const payload = await apiFetch<SystemStatus["motion_state"]>("/api/control/emergency-stop", token, { method: "POST" });
+      setStatus((previous) => (previous && payload ? { ...previous, motion_state: payload } : previous));
+      setToast("急停已执行 · 车辆停止并锁定控制");
+    } catch (err) {
+      setError(`急停请求失败：${explainMobileError(err)}`);
+    } finally {
+      setEmergencyPending(false);
+    }
+  }
+
   async function steerCruise(direction: "center" | "left" | "right") {
     if (!cruiseActive) return;
     cruiseSteeringDesiredRef.current = direction;
@@ -762,6 +778,23 @@ export default function MobileCaptureConsole() {
           </>}
           {capture?.last_error && !isTransientCaptureWarning(capture.last_error) ? <div className="mobile-inline-error"><ExclamationTriangleIcon />{capture.last_error}</div> : null}
         </div>
+      ) : null}
+
+      {tab === "monitor" ? (
+        <button
+          type="button"
+          className="mobile-emergency-stop"
+          onClick={() => void emergencyStop()}
+          disabled={emergencyPending}
+          aria-label="立即急停并锁定车辆控制"
+        >
+          <span className="mobile-emergency-stop-icon"><ExclamationTriangleIcon /></span>
+          <span className="mobile-emergency-stop-copy">
+            <strong>{emergencyPending ? "正在急停…" : "立即急停"}</strong>
+            <small>停车 · 退出巡航 · 锁定控制</small>
+          </span>
+          <span className="mobile-emergency-stop-code">E-STOP</span>
+        </button>
       ) : null}
 
       <nav className="mobile-bottom-nav" aria-label="主导航">

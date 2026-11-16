@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ArrowsPointingOutIcon, VideoCameraIcon } from "./FlClashIcons";
 import { API_BASE, apiFetch, classNames } from "../lib";
 import type { ConnectionState, StreamStats } from "../types";
 
@@ -13,11 +14,13 @@ export function VideoStream({
   token,
   useFallback,
   onStateChange,
+  presentation,
 }: {
   mode: "visible_raw" | "ir_raw" | "annotated";
   token: string;
   useFallback: boolean;
   onStateChange?: (state: ConnectionState) => void;
+  presentation?: "console";
 }) {
   const [videoState, setVideoState] = useState<ConnectionState>("idle");
   const [streamStats, setStreamStats] = useState<StreamStats>({});
@@ -28,6 +31,7 @@ export function VideoStream({
   
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const statsRef = useRef<{ bytes: number; timestamp: number }>({ bytes: 0, timestamp: 0 });
   const statsTimerRef = useRef<number | null>(null);
   const frameWatchTimerRef = useRef<number | null>(null);
@@ -181,9 +185,50 @@ export function VideoStream({
     await connectWebRTC();
   }
 
+  if (presentation === "console") {
+    const channel = mode === "ir_raw" ? "红外" : mode === "annotated" ? "检测结果" : "可见光";
+    const connectionLabels: Record<ConnectionState, string> = {
+      idle: "等待连接", connecting: "连接中", connected: "已连接", reconnecting: "重连中", failed: "连接失败",
+    };
+    const connected = videoState === "connected";
+    return (
+      <div className="console-feed" data-channel={mode}>
+        <div className="console-feed-heading">
+          <span><b>{mode === "ir_raw" ? "02" : "01"}</b>{channel}</span>
+          <span className="console-feed-status" data-state={streamStats.frozen ? "failed" : videoState}><i aria-hidden="true" />{streamStats.frozen ? "画面暂停" : connectionLabels[videoState]}</span>
+        </div>
+        <div ref={frameRef} className="console-video-frame">
+          {!useFallback ? (
+            <video ref={videoRef} autoPlay playsInline muted className="console-video-media" />
+          ) : (
+            <img
+              alt={`${channel}实时画面`}
+              src={`${API_BASE}/api/stream/fallback?token=${encodeURIComponent(token)}&mode=${encodeURIComponent(mode)}`}
+              className="console-video-media"
+              style={{ visibility: connected ? "visible" : "hidden" }}
+              onLoad={() => setVideoState("connected")}
+              onError={() => setVideoState("failed")}
+            />
+          )}
+          {!connected && <div className="console-video-empty"><span><VideoCameraIcon aria-hidden="true" /></span><strong>{videoState === "failed" ? "视频暂不可用" : "正在连接画面"}</strong><p>{videoState === "failed" ? "请检查摄像头与视频源连接" : "等待设备传输实时视频"}</p></div>}
+          <span className="console-feed-transport">{useFallback ? "兼容视频" : "实时视频"}</span>
+          <button type="button" className="console-video-fullscreen" aria-label={`全屏查看${channel}`} onClick={() => {
+            const request = document.fullscreenElement ? document.exitFullscreen() : frameRef.current?.requestFullscreen();
+            void request?.catch(() => undefined);
+          }}><ArrowsPointingOutIcon aria-hidden="true" /></button>
+        </div>
+        <div className="console-feed-metrics">
+          <span><b>{streamStats.fps != null ? streamStats.fps.toFixed(1) : "—"}</b> FPS</span>
+          <span>{streamStats.width && streamStats.height ? `${streamStats.width} × ${streamStats.height}` : "分辨率 —"}</span>
+          <span>延迟 <b>{streamStats.rttMs != null ? `${streamStats.rttMs.toFixed(0)} ms` : "—"}</b></span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full w-full gap-2">
-      <div className="relative overflow-hidden rounded-xl border-2 border-slate-900 bg-black shadow-inner flex-1">
+      <div className="video-frame relative overflow-hidden rounded-xl border-2 border-slate-900 bg-black shadow-inner flex-1">
         {!useFallback ? (
           <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" />
         ) : (

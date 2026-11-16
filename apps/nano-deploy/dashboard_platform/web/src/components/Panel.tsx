@@ -12,14 +12,14 @@ export function Panel({ title, subtitle, className, right, children }: PanelProp
   return (
     <section
       className={classNames(
-        "rounded-lg border border-base/70 bg-panel p-6",
+        "workspace-panel",
         className,
       )}
     >
-      <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="panel-heading">
         <div>
-          <h2 className="text-xl font-semibold text-primary">{title}</h2>
-          {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+          <h2 className="panel-title">{title}</h2>
+          {subtitle ? <p className="panel-description">{subtitle}</p> : null}
         </div>
         {right}
       </div>
