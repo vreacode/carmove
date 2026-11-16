@@ -20,8 +20,8 @@ import {
   WifiIcon,
 } from "./components/FlClashIcons";
 import { VideoStream } from "./components/VideoStream";
-import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
-import { API_BASE, apiFetch, clearToken, loadToken, saveToken, wsUrl } from "./lib";
+import { useDeviceStatus } from "./hooks/useDeviceStatus";
+import { API_BASE, apiFetch, clearToken, loadToken, saveToken } from "./lib";
 import type { CaptureFrameItem, CaptureGalleryItem, CaptureStatus, ConnectionState, SiyiCameraStatus, SystemStatus } from "./types";
 
 type LoginResponse = { token: string; username: string };
@@ -254,7 +254,9 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 export default function MobileCaptureConsole() {
   const [token, setToken] = useState(loadToken());
   const [tab, setTab] = useState<Tab>("capture");
-  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [status, setStatus] = useDeviceStatus(token, {
+    onError: (err) => setError(explainMobileError(err)),
+  });
   const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
   const [gallery, setGallery] = useState<CaptureGalleryItem[]>([]);
@@ -292,30 +294,6 @@ export default function MobileCaptureConsole() {
   const latestFrameUrl = capture?.latest_frame
     ? `${API_BASE}/api/capture/latest?token=${encodeURIComponent(token)}&v=${capture.frames_saved}`
     : "";
-
-  useReconnectingWebSocket({
-    enabled: !!token,
-    url: wsUrl("/ws/status", token),
-    onMessage: (event) => setStatus(JSON.parse(event.data) as SystemStatus),
-    onDisconnect: () => {
-      setStatus((previous) => previous
-        ? { ...previous, agent_online: false, board_online: false }
-        : previous);
-    },
-  });
-
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    void apiFetch<SystemStatus>("/api/system/status", token).then((payload) => {
-      if (!cancelled) setStatus(payload);
-    }).catch((err) => {
-      if (!cancelled) setError(explainMobileError(err));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   useEffect(() => {
     if (!token || !cruiseActive) return;

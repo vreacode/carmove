@@ -18,11 +18,12 @@ import type { Algorithm } from "./algorithms";
 import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
 import { LiveWorkspace } from "./components/LiveWorkspace";
 import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
+import { useDeviceStatus } from "./hooks/useDeviceStatus";
 import { AnimatedNumber, DataMotionProvider } from "./components/DataMotion";
 import { ResourceTrends } from "./components/ResourceTrends";
 import { useResourceHistory } from "./hooks/useResourceHistory";
 import { API_BASE, apiFetch, classNames, clearToken, formatNumber, loadToken, saveToken, wsUrl } from "./lib";
-import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaItem, MediaStatus, NavigationState, SiyiCameraStatus, SystemStatus } from "./types";
+import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaItem, MediaStatus, ModelStatus, NavigationState, SiyiCameraStatus, SystemStatus } from "./types";
 
 type LoginResponse = { token: string; username: string };
 
@@ -104,7 +105,25 @@ function App() {
   const [token, setToken] = useState(loadToken());
   const [activeTab, setActiveTab] = useState<SidebarTab>(() => tabFromHash(window.location.hash));
   const [navigationRevision, setNavigationRevision] = useState(0);
-  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [status, setStatus] = useDeviceStatus(token, {
+    onStatus: (payload) => {
+      if (payload.current_video_source && !sourceEditedRef.current) setSource(payload.current_video_source);
+      if (payload.current_model && !modelSelectionEditedRef.current) setSelectedModel(payload.current_model);
+      if (!mapDefaultLoadedRef.current) {
+        mapDefaultLoadedRef.current = true;
+        if (payload.current_map_name) {
+          setSelectedMapName((current) => current || payload.current_map_name || "");
+          setMapNameInput((current) => current || payload.current_map_name || "");
+        }
+      }
+      setVideoSourceMode((current) => (
+        payload.current_video_mode === "visible_raw" && current === "annotated" && !payload.model_status?.running
+          ? "visible_raw" : current
+      ));
+    },
+    onError: (err) => setError(describeError(err)),
+    onDisconnect: () => setVideoState((current) => current === "connected" ? "reconnecting" : current),
+  });
   const resourceHistory = useResourceHistory(status);
   const [cameraStatus, setCameraStatus] = useState<SiyiCameraStatus | null>(null);
   const [gimbalPending, setGimbalPending] = useState(false);
@@ -158,6 +177,13 @@ function App() {
   const cruiseSteeringRequestRef = useRef<Promise<void> | null>(null);
   const cruiseSteeringDesiredRef = useRef<"center" | "left" | "right">("center");
   const modelSelectionEditedRef = useRef(false);
+  const sourceEditedRef = useRef(false);
+  const mapDefaultLoadedRef = useRef(false);
+
+  function chooseSource(value: string) {
+    sourceEditedRef.current = true;
+    setSource(value);
+  }
 
   function chooseModel(modelId: string) {
     modelSelectionEditedRef.current = true;
@@ -241,64 +267,12 @@ function App() {
 
   useReconnectingWebSocket({
     enabled: !!token,
-    url: wsUrl("/ws/status", token),
-    onMessage: (event) => {
-      const payload = JSON.parse(event.data) as SystemStatus;
-      setStatus(payload);
-      if (payload.current_video_source) setSource((current) => current || payload.current_video_source || "");
-      if (payload.current_model && !modelSelectionEditedRef.current) setSelectedModel(payload.current_model);
-      setVideoSourceMode((current) => (
-        payload.current_video_mode === "visible_raw" &&
-        current === "annotated" &&
-        !payload.model_status?.running
-          ? "visible_raw"
-          : current
-      ));
-    },
-    onDisconnect: () => {
-      setStatus((current) => current ? { ...current, agent_online: false, board_online: false } : current);
-      setVideoState((current) => current === "connected" ? "reconnecting" : current);
-    },
-  });
-
-  useReconnectingWebSocket({
-    enabled: !!token,
     url: wsUrl("/ws/logs", token),
     onMessage: (event) => {
       const item = JSON.parse(event.data) as LogItem;
       setLogs((prev) => [...prev.slice(-299), item]);
     },
   });
-
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    void apiFetch<SystemStatus>("/api/system/status", token)
-      .then((payload) => {
-        if (cancelled) return;
-        setStatus(payload);
-        if (payload.current_video_source) setSource((current) => current || payload.current_video_source || "");
-        if (payload.current_model && !modelSelectionEditedRef.current) setSelectedModel(payload.current_model);
-        if (payload.current_map_name) {
-          setSelectedMapName((current) => current || payload.current_map_name || "");
-          setMapNameInput((current) => current || payload.current_map_name || "");
-        }
-        setVideoSourceMode((current) => (
-          payload.current_video_mode === "visible_raw" &&
-          current === "annotated" &&
-          !payload.model_status?.running
-            ? "visible_raw"
-            : current
-        ));
-      })
-      .catch((err) => {
-        if (!cancelled) setError(describeError(err));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -475,7 +449,7 @@ function App() {
           parking_dwell_seconds: dwellSeconds,
         };
       }
-      await apiFetch(`/api/model/${action}`, token, {
+      const response = await apiFetch<{ model_status: ModelStatus }>(`/api/model/${action}`, token, {
         method: "POST",
         body: JSON.stringify({
           model_id: selectedModel,
@@ -485,6 +459,7 @@ function App() {
           ...parkingPayload,
         }),
       });
+      receiveModelStatus(response);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -492,11 +467,22 @@ function App() {
     }
   }
 
+  function receiveModelStatus(response: { model_status?: ModelStatus }) {
+    const modelStatus = response?.model_status;
+    if (typeof modelStatus?.running !== "boolean") return;
+    setStatus((current) => current ? {
+      ...current,
+      model_status: modelStatus,
+      current_model: modelStatus.running && modelStatus.model_id ? modelStatus.model_id : current.current_model,
+    } : current);
+  }
+
   async function stopModel() {
     try {
       setModelPending("stop");
       setError("");
-      await apiFetch("/api/model/stop", token, { method: "POST" });
+      const response = await apiFetch<{ model_status: ModelStatus }>("/api/model/stop", token, { method: "POST" });
+      receiveModelStatus(response);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -979,6 +965,9 @@ function App() {
 
   function logout() {
     modelSelectionEditedRef.current = false;
+    sourceEditedRef.current = false;
+    mapDefaultLoadedRef.current = false;
+    setSource("");
     clearToken();
     setToken("");
     setStatus(null);
@@ -1059,7 +1048,7 @@ function App() {
         {activeTab === "live" ? <LiveWorkspace
           token={token} status={status} error={error} resourceHistory={resourceHistory}
           video={{ mode: videoSourceMode, setMode: setVideoSourceMode, useFallback, toggleFallback: () => setUseFallback((prev) => !prev), onStateChange: setVideoState }}
-          model={{ selected: selectedModel, choose: chooseModel, source, setSource, pending: modelPending, run: (action) => void runModel(action), stop: () => void stopModel(), parkingEnabled, setParkingEnabled, parkingZone: parkingZoneInput, setParkingZone: setParkingZoneInput, parkingDwell: parkingDwellInput, setParkingDwell: setParkingDwellInput }}
+          model={{ selected: selectedModel, choose: chooseModel, source, setSource: chooseSource, pending: modelPending, run: (action) => void runModel(action), stop: () => void stopModel(), parkingEnabled, setParkingEnabled, parkingZone: parkingZoneInput, setParkingZone: setParkingZoneInput, parkingDwell: parkingDwellInput, setParkingDwell: setParkingDwellInput }}
           control={{ speed, setSpeed, pending: controlPending, armPending, overridePending, cruisePending, cruiseActive, cruiseSteering, blocked: manualControlBlocked, hint: controlHint, commandState, send: (command) => void sendControl(command), setArmed: (armed) => void setControlArm(armed), setOverride: (enabled) => void setManualOverride(enabled), startCruise: () => void startCruise(), stopCruise: () => void stopCruise(), steerCruise: (direction) => void steerCruise(direction), emergencyStop: () => void emergencyStop() }}
         /> : null}
 
