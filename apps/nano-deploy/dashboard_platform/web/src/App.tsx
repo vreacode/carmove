@@ -19,11 +19,12 @@ import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
 import { LiveWorkspace } from "./components/LiveWorkspace";
 import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
 import { useDeviceStatus } from "./hooks/useDeviceStatus";
+import { useMediaGallery } from "./hooks/useMediaGallery";
 import { AnimatedNumber, DataMotionProvider } from "./components/DataMotion";
 import { ResourceTrends } from "./components/ResourceTrends";
 import { useResourceHistory } from "./hooks/useResourceHistory";
 import { API_BASE, apiFetch, classNames, clearToken, formatNumber, loadToken, saveToken, wsUrl } from "./lib";
-import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaItem, MediaStatus, ModelStatus, NavigationState, SiyiCameraStatus, SystemStatus } from "./types";
+import type { ConnectionState, LogItem, MapEntry, MapMetadata, MapPoint, MediaStatus, ModelStatus, NavigationState, SiyiCameraStatus, SystemStatus } from "./types";
 
 type LoginResponse = { token: string; username: string };
 
@@ -156,9 +157,10 @@ function App() {
   const [goalYawInput, setGoalYawInput] = useState("0");
   const [navigationPending, setNavigationPending] = useState<"" | "initial" | "goal" | "cancel">("");
   const [mediaStatus, setMediaStatus] = useState<MediaStatus | null>(null);
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const mediaGallery = useMediaGallery(token);
+  const mediaItems = mediaGallery.items;
   const [mediaPending, setMediaPending] = useState<"" | "record-start" | "record-stop" | "snapshot">("");
-  const [galleryLoading, setGalleryLoading] = useState(false);
+  const galleryLoading = mediaGallery.loading !== "";
   const [mediaTab, setMediaTab] = useState<"gallery" | "events">("gallery");
   const [loginForm, setLoginForm] = useState({ username: "admin", password: "" });
   const [error, setError] = useState("");
@@ -337,7 +339,11 @@ function App() {
 
   useEffect(() => {
     if (!token) return;
-    void refreshMedia();
+    const controller = new AbortController();
+    void apiFetch<MediaStatus>("/api/media/status", token, { signal: controller.signal })
+      .then((payload) => { if (!controller.signal.aborted) setMediaStatus(payload); })
+      .catch((err) => { if (!controller.signal.aborted) setError(describeError(err)); });
+    return () => controller.abort();
   }, [token]);
 
   useEffect(() => {
@@ -809,19 +815,12 @@ function App() {
   }
 
   async function refreshMedia() {
-    try {
-      setGalleryLoading(true);
-      const [statusPayload, galleryPayload] = await Promise.all([
-        apiFetch<MediaStatus>("/api/media/status", token),
-        apiFetch<{ items: MediaItem[] }>("/api/media/gallery?page=1&page_size=20", token),
-      ]);
-      setMediaStatus(statusPayload);
-      setMediaItems(galleryPayload.items);
-    } catch (err) {
-      setError(describeError(err));
-    } finally {
-      setGalleryLoading(false);
-    }
+    await Promise.all([
+      mediaGallery.refresh(),
+      apiFetch<MediaStatus>("/api/media/status", token)
+        .then(setMediaStatus)
+        .catch((err) => setError(describeError(err))),
+    ]);
   }
 
   async function startRecording() {
@@ -1477,8 +1476,8 @@ function App() {
         {activeTab === "perception" ? <div id="section-perception" className="grid gap-5 xl:grid-cols-12">
           <Panel title="媒体与记录" subtitle="查看录像、照片与检测记录。" className="h-full xl:col-span-5 flex flex-col">
             <div className="mb-4 grid grid-cols-2 gap-3">
-              <StatCard label="录像状态" value={mediaStatus?.recording_running ? "recording" : "idle"} />
-              <StatCard label="记录总数" value={String(mediaItems.length)} animate />
+              <StatCard label="录像状态" value={mediaStatus ? mediaStatus.recording_running ? "录制中" : "未录制" : "暂无状态"} />
+              <StatCard label="已加载记录" value={String(mediaItems.length)} animate />
             </div>
 
             {/* Tab Header */}
@@ -1508,31 +1507,31 @@ function App() {
                 <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
                   <ActionButton
                     icon={<PlayCircleIcon className="h-5 w-5" />}
-                    label={mediaPending === "record-start" ? "..." : "开始录制"}
+                    label={mediaPending === "record-start" ? "正在开始…" : "开始录制"}
                     disabled={mediaPending !== "" || !mediaStatus?.enabled || !!mediaStatus?.recording_running}
                     onClick={() => void startRecording()}
                   />
                   <ActionButton
                     icon={<PauseCircleIcon className="h-5 w-5" />}
-                    label={mediaPending === "record-stop" ? "..." : "停止录制"}
+                    label={mediaPending === "record-stop" ? "正在停止…" : "停止录制"}
                     disabled={mediaPending !== "" || !mediaStatus?.recording_running}
                     onClick={() => void stopRecording()}
                   />
                   <ActionButton
                     icon={<BoltIcon className="h-5 w-5" />}
-                    label={mediaPending === "snapshot" ? "..." : "拍照"}
+                    label={mediaPending === "snapshot" ? "正在拍照…" : "拍照"}
                     disabled={mediaPending !== "" || !mediaStatus?.enabled}
                     onClick={() => void takeSnapshot()}
                   />
                   <ActionButton
                     icon={<ArrowPathIcon className="h-5 w-5" />}
-                    label={galleryLoading ? "..." : "刷新"}
+                    label={mediaGallery.loading === "refresh" ? "正在刷新…" : "刷新"}
                     disabled={galleryLoading || mediaPending !== ""}
                     onClick={() => void refreshMedia()}
                   />
                 </div>
                 <div className="max-h-[300px] space-y-2 overflow-auto pr-1 flex-1">
-                  {mediaItems.filter(it => it.storage_kind !== "event").slice(0, 8).map((item) => {
+                  {mediaItems.filter(it => it.storage_kind !== "event").map((item) => {
                     const fileUrl = `${API_BASE}/api/media/files/${encodeURIComponent(item.storage_kind)}/${encodeURIComponent(item.filename)}?token=${encodeURIComponent(token)}`;
                     return (
                       <div key={`${item.storage_kind}-${item.filename}`} className="rounded-xl border border-base bg-panel/90 p-3 text-sm text-tertiary shadow-sm">
@@ -1550,7 +1549,7 @@ function App() {
                       </div>
                     );
                   })}
-                  {!galleryLoading && mediaItems.filter(it => it.storage_kind !== "event").length === 0 ? <p className="text-sm text-muted">暂无媒体文件。</p> : null}
+                  {!galleryLoading && !mediaGallery.error && mediaItems.filter(it => it.storage_kind !== "event").length === 0 ? <p className="text-sm text-muted">当前已加载记录中没有录像或照片。</p> : null}
                 </div>
               </>
             ) : (
@@ -1560,7 +1559,7 @@ function App() {
                   <button onClick={() => void refreshMedia()} disabled={galleryLoading} className="text-xs text-accent-600 hover:underline">刷新记录</button>
                 </div>
                 <div className="max-h-[360px] space-y-2 overflow-auto pr-1 flex-1">
-                  {mediaItems.filter(it => it.storage_kind === "event").slice(0, 15).map((item) => {
+                  {mediaItems.filter(it => it.storage_kind === "event").map((item) => {
                     const fileUrl = `${API_BASE}/api/media/files/${encodeURIComponent(item.storage_kind)}/${encodeURIComponent(item.filename)}?token=${encodeURIComponent(token)}`;
                     // Extract label from filename if possible: 20260419_120000_label.jpg
                     const parts = item.filename.replace(".jpg", "").split("_");
@@ -1571,7 +1570,7 @@ function App() {
                       <div key={`${item.storage_kind}-${item.filename}`} className="rounded-xl border border-base bg-panel/90 p-3 text-sm text-tertiary shadow-sm hover:border-accent-300 transition-colors">
                         <div className="flex items-center gap-3">
                           <div className="h-12 w-16 shrink-0 overflow-hidden rounded-md border border-base bg-black">
-                            <img src={fileUrl} className="h-full w-full object-cover opacity-80 hover:opacity-100 transition-opacity" alt="event" />
+                            <img src={fileUrl} className="h-full w-full object-cover opacity-80 hover:opacity-100 transition-opacity" alt={`${label} 检测记录`} loading="lazy" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
@@ -1587,10 +1586,20 @@ function App() {
                       </div>
                     );
                   })}
-                  {!galleryLoading && mediaItems.filter(it => it.storage_kind === "event").length === 0 ? <p className="text-sm text-muted">暂无检测记录。</p> : null}
+                  {!galleryLoading && !mediaGallery.error && mediaItems.filter(it => it.storage_kind === "event").length === 0 ? <p className="text-sm text-muted">当前已加载记录中没有检测记录。</p> : null}
                 </div>
               </>
             )}
+            {mediaGallery.error ? (
+              <div role="alert" className="mt-3 rounded-lg border border-base p-3 text-sm text-secondary">
+                <p>记录加载失败：{mediaGallery.error}</p>
+                <button type="button" className="mt-2 text-accent-600 hover:underline" disabled={galleryLoading} onClick={() => void mediaGallery.retry()}>重试加载记录</button>
+              </div>
+            ) : null}
+            {galleryLoading ? <p role="status" className="mt-3 text-sm text-muted">{mediaGallery.loading === "more" ? "正在加载更多记录…" : "正在刷新记录…"}</p> : null}
+            {mediaGallery.hasMore ? (
+              <button type="button" className="mt-3 rounded-lg border border-base bg-card px-3 py-2 text-sm text-secondary hover:bg-panel disabled:opacity-40" disabled={galleryLoading || mediaPending !== ""} onClick={() => void mediaGallery.loadMore()}>加载更多记录</button>
+            ) : null}
           </Panel>
 
           <div className="xl:col-span-7 h-full">
@@ -1601,13 +1610,14 @@ function App() {
               right={
                 <div className="flex items-center gap-2">
                   <select
+                    aria-label="日志类型"
                     value={logFilter}
                     onChange={(event) => setLogFilter(event.target.value as (typeof logFilters)[number])}
                     className="rounded-full border border-base bg-panel/80 px-3 py-2 text-sm text-tertiary"
                   >
                     {logFilters.map((item) => (
                       <option key={item} value={item}>
-                        {item}
+                        {{ all: "全部", system: "系统", model: "模型", control: "控制" }[item]}
                       </option>
                     ))}
                   </select>
@@ -1618,7 +1628,7 @@ function App() {
               }
             >
               <div className="max-h-[320px] overflow-auto rounded-xl border border-base bg-card p-4 font-mono text-xs leading-6 text-tertiary">
-                {filteredLogs.length === 0 ? <p className="text-muted">No logs.</p> : null}
+                {filteredLogs.length === 0 ? <p className="text-muted">暂无日志。</p> : null}
                 {filteredLogs.map((item, index) => (
                   <div key={`${item.timestamp}-${index}`} className="border-b border-base/60 py-1 last:border-b-0">
                     <span className="text-accent-600">{new Date(item.timestamp).toLocaleTimeString()}</span>{" "}

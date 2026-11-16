@@ -151,10 +151,10 @@ function BaseHealth({ status }: { status: SystemStatus | null }) {
     <section className={`mobile-base-health ${ready ? "is-ready" : "is-checking"}`}>
       <div className="mobile-base-health-heading">
         <div>
-          <span className="mobile-eyebrow">CHASSIS LINK</span>
+          <span className="mobile-eyebrow">底盘链路</span>
           <h3>{ready ? "底盘可控制" : base?.running ? "底盘正在启动" : "底盘待启动"}</h3>
         </div>
-        <span className="mobile-base-health-state">{ready ? "READY" : "CHECK"}</span>
+        <span className="mobile-base-health-state">{ready ? "就绪" : "待检查"}</span>
       </div>
       <div className="mobile-base-checks">
         {checks.map((item) => (
@@ -237,16 +237,16 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
   return (
     <main className="mobile-auth">
       <div className="mobile-auth-mark"><CameraIcon /></div>
-      <p className="mobile-kicker">CARMOVE / FIELD CONSOLE</p>
-      <h1>让每一段现场<br /><em>马上可用。</em></h1>
-      <p className="mobile-auth-copy">通过 Tailscale 连接小车，实时查看视频，记录带场景和备注的训练素材。</p>
+      <p className="mobile-kicker">CarMove</p>
+      <h1>小车控制台</h1>
+      <p className="mobile-auth-copy">查看实时画面、采集图片和管理记录。</p>
       <form className="mobile-auth-form" onSubmit={submit}>
         <label>账号<input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} autoComplete="username" /></label>
         <label>密码<input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="current-password" /></label>
         {error ? <div className="mobile-inline-error"><ExclamationTriangleIcon />{error}</div> : null}
-        <button className="mobile-primary-button" disabled={pending}>{pending ? "正在连接…" : "进入现场控制台"}</button>
+        <button className="mobile-primary-button" disabled={pending}>{pending ? "正在登录…" : "登录"}</button>
       </form>
-      <p className="mobile-auth-foot"><WifiIcon /> Tailscale 私有网络 · 不暴露公网</p>
+      <p className="mobile-auth-foot"><WifiIcon /> 支持局域网或 Tailscale 连接</p>
     </main>
   );
 }
@@ -264,6 +264,8 @@ export default function MobileCaptureConsole() {
   const [galleryFrames, setGalleryFrames] = useState<CaptureFrameItem[]>([]);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(0);
   const [galleryViewerLoading, setGalleryViewerLoading] = useState(false);
+  const [galleryViewerError, setGalleryViewerError] = useState("");
+  const galleryViewerRequestRef = useRef<AbortController | null>(null);
   const viewerTouchStartRef = useRef<number | null>(null);
   const [videoState, setVideoState] = useState<ConnectionState>("idle");
   const [useFallback, setUseFallback] = useState(false);
@@ -404,7 +406,16 @@ export default function MobileCaptureConsole() {
     }
   }
 
+  useEffect(() => {
+    if (!token || tab !== "archive") closeGallery();
+    return () => { galleryViewerRequestRef.current?.abort(); };
+  }, [token, tab]);
+
   async function openGallery(item: CaptureGalleryItem) {
+    galleryViewerRequestRef.current?.abort();
+    const controller = new AbortController();
+    galleryViewerRequestRef.current = controller;
+    setGalleryViewerError("");
     setSelectedGallery(item);
     setGalleryFrames([]);
     setSelectedFrameIndex(0);
@@ -414,12 +425,16 @@ export default function MobileCaptureConsole() {
       const payload = await apiFetch<{ items: CaptureFrameItem[] }>(
         `/api/capture/gallery/${encodeURIComponent(item.group)}/frames`,
         token,
+        { signal: controller.signal },
       );
-      setGalleryFrames(payload.items);
+      if (!controller.signal.aborted) setGalleryFrames(payload.items);
     } catch (err) {
-      setError(explainMobileError(err));
+      if (!controller.signal.aborted) setGalleryViewerError(explainMobileError(err));
     } finally {
-      setGalleryViewerLoading(false);
+      if (galleryViewerRequestRef.current === controller && !controller.signal.aborted) {
+        galleryViewerRequestRef.current = null;
+        setGalleryViewerLoading(false);
+      }
     }
   }
 
@@ -439,6 +454,10 @@ export default function MobileCaptureConsole() {
   }
 
   function closeGallery() {
+    galleryViewerRequestRef.current?.abort();
+    galleryViewerRequestRef.current = null;
+    setGalleryViewerLoading(false);
+    setGalleryViewerError("");
     setSelectedGallery(null);
     setGalleryFrames([]);
     setSelectedFrameIndex(0);
@@ -599,7 +618,7 @@ export default function MobileCaptureConsole() {
       const payload = await apiFetch<CaptureStatus>("/api/capture/stop", token, { method: "POST" });
       setCapture(payload);
       if (payload.stream_mode) setStreamMode(payload.stream_mode);
-      setToast("采集已停止，manifest 已保存");
+      setToast("采集已停止，记录已保存");
     } catch (err) {
       setError(explainMobileError(err));
     } finally {
@@ -633,7 +652,7 @@ export default function MobileCaptureConsole() {
     <main className="mobile-app">
       <header className="mobile-topbar">
         <div>
-          <p className="mobile-kicker">CARMOVE / FIELD CONSOLE</p>
+          <p className="mobile-kicker">CarMove</p>
           <h1>{tab === "capture" ? "现场采集" : tab === "monitor" ? "链路监控" : "采集记录"}</h1>
         </div>
         <div className="mobile-topbar-actions">
@@ -669,10 +688,10 @@ export default function MobileCaptureConsole() {
 
           <section className={`mobile-capture-card ${capture?.running ? "is-running" : ""}`}>
             <div className="mobile-section-heading">
-              <div><span className="mobile-eyebrow">{capturePreparing ? "VERIFYING FIRST FRAME" : captureReady ? "CAPTURE VERIFIED" : capture?.phase === "completed" ? "CAPTURE COMPLETE" : "READY FOR FIELD"}</span><h2>{capturePreparing ? "正在连接并验证完整画面" : captureReady ? `正在采集 ${capture.scene}` : capture?.phase === "completed" ? "上一段采集已安全保存" : "准备采集一段现场"}</h2></div>
+              <div><span className="mobile-eyebrow">{capturePreparing ? "连接中" : captureReady ? "采集中" : capture?.phase === "completed" ? "已完成" : "采集任务"}</span><h2>{capturePreparing ? "正在连接相机" : captureReady ? `正在采集 ${capture.scene}` : capture?.phase === "completed" ? "上次采集已完成" : "设置采集任务"}</h2></div>
               <div className={`mobile-capture-orb ${capture?.running || capturePreparing ? "is-running" : ""}`}><CameraIcon /></div>
             </div>
-            <div className="mobile-capture-counter"><strong>{capture?.frames_saved ?? 0}</strong><span>张已保存</span>{capture?.running ? <small>{capture.frame_width && capture.frame_height ? `${capture.frame_width}×${capture.frame_height} · ` : ""}{formatCaptureSize(capture.bytes_saved)} · {formatCaptureElapsed(capture.elapsed_seconds)}</small> : <small>完整帧 + manifest 自动落盘</small>}</div>
+            <div className="mobile-capture-counter"><strong>{capture?.frames_saved ?? 0}</strong><span>张已保存</span>{capture?.running ? <small>{capture.frame_width && capture.frame_height ? `${capture.frame_width}×${capture.frame_height} · ` : ""}{formatCaptureSize(capture.bytes_saved)} · {formatCaptureElapsed(capture.elapsed_seconds)}</small> : <small>图片按场景与时间保存</small>}</div>
             {capture?.running ? <div className="mobile-capture-progress-wrap"><div className="mobile-capture-progress"><span style={{ width: `${captureProgress(capture)}%` }} /></div><div><span>任务进度</span><strong>{capture.max_frames ? `${capture.frames_saved} / ${capture.max_frames} 帧` : "持续采集中"}</strong></div></div> : null}
             <div className="mobile-capture-readiness" aria-label="现场采集就绪检查">
               <div className={online ? "is-good" : "is-bad"}><span>{online ? <CheckCircleIcon /> : <ExclamationTriangleIcon />}</span><strong>控制台</strong><small>{online ? "在线" : "离线"}</small></div>
@@ -705,7 +724,7 @@ export default function MobileCaptureConsole() {
 
       {tab === "monitor" ? (
         <div className="mobile-page mobile-monitor-page">
-          <section className="mobile-monitor-hero"><div className="mobile-monitor-signal"><WifiIcon /><span>{online ? "CONNECTED" : "OFFLINE"}</span></div><h2>{online ? "设备链路正常" : "等待设备重新上线"}</h2><p>最后心跳：{formatAge(status?.last_heartbeat)}</p></section>
+          <section className="mobile-monitor-hero"><div className="mobile-monitor-signal"><WifiIcon /><span>{online ? "已连接" : "未连接"}</span></div><h2>{online ? "设备链路正常" : "等待设备重新上线"}</h2><p>最后心跳：{formatAge(status?.last_heartbeat)}</p></section>
           <div className="mobile-metric-grid">
             <Metric label="CPU" value={status?.cpu_percent != null ? `${status.cpu_percent.toFixed(0)}%` : "--"} />
             <Metric label="内存" value={status?.memory_percent != null ? `${status.memory_percent.toFixed(0)}%` : "--"} />
@@ -718,9 +737,9 @@ export default function MobileCaptureConsole() {
           <BaseHealth status={status} />
           <section className="mobile-detail-card"><div className="mobile-detail-row"><span>视频源</span><strong>{status?.current_video_source || "--"}</strong></div><div className="mobile-detail-row"><span>分辨率目标</span><strong>video1 / 可见光</strong></div><div className="mobile-detail-row"><span>云台状态</span><strong>{cameraStatus?.status?.motion_mode_name || "--"} · {cameraStatus?.attitude?.yaw_deg?.toFixed(1) ?? "--"}° yaw</strong></div><div className="mobile-detail-row"><span>电池</span><strong>{batteryDetailLabel(status)}{status?.battery_status?.charging ? " · 充电中" : ""}</strong></div><div className="mobile-detail-row"><span>控制模式</span><strong>{status?.motion_state?.mode || "dry_run"}</strong></div></section>
           <section className="mobile-cruise-card">
-            <div className="mobile-cruise-heading"><div><span className="mobile-eyebrow">MOTION ASSIST</span><h2>匀速前进</h2></div><span className={cruiseActive ? "mobile-cruise-status is-active" : "mobile-cruise-status"}>{cruiseActive ? (cruiseSteering === "center" ? "直行中" : cruiseSteering === "left" ? "左修正" : "右修正") : "待启动"}</span></div>
+            <div className="mobile-cruise-heading"><div><span className="mobile-eyebrow">辅助控制</span><h2>匀速前进</h2></div><span className={cruiseActive ? "mobile-cruise-status is-active" : "mobile-cruise-status"}>{cruiseActive ? (cruiseSteering === "center" ? "直行中" : cruiseSteering === "left" ? "左修正" : "右修正") : "待启动"}</span></div>
             <p className="mobile-cruise-copy">底盘持续保持低速前进，按住左右键修正方向，松开后自动回到直行。</p>
-            <div className="mobile-cruise-speed"><span>速度档位</span>{cruiseSpeeds.map((item) => <button key={item} type="button" onClick={() => setCruiseSpeed(item)} disabled={cruiseActive} className={cruiseSpeed === item ? "is-active" : ""}>{item}</button>)}</div>
+            <div className="mobile-cruise-speed"><span>速度档位</span>{cruiseSpeeds.map((item) => <button key={item} type="button" onClick={() => setCruiseSpeed(item)} disabled={cruiseActive} className={cruiseSpeed === item ? "is-active" : ""}>{{ low: "低速", medium: "中速", high: "高速" }[item]}</button>)}</div>
             <button type="button" className={`mobile-cruise-toggle ${cruiseActive ? "is-stop" : ""}`} onClick={() => void (cruiseActive ? stopCruise() : startCruise())} disabled={cruisePending !== "" || (!cruiseActive && cruiseBlocked)}>{cruisePending === "prepare" ? "正在启动底盘…" : cruisePending === "start" ? "正在启动…" : cruisePending === "stop" ? "正在停车…" : cruiseActive ? "停止匀速前进" : "开始匀速前进"}</button>
             {cruiseActive ? <div className="mobile-cruise-directions"><MobileCruiseButton icon={<ChevronLeftIcon />} title="按住左修正" onPress={() => void steerCruise("left")} onRelease={() => void steerCruise("center")} disabled={cruisePending !== ""} /><MobileCruiseButton icon={<ChevronUpIcon />} title="直行" onPress={() => void steerCruise("center")} onRelease={() => void steerCruise("center")} active={cruiseSteering === "center"} disabled={cruisePending !== ""} /><MobileCruiseButton icon={<ChevronRightIcon />} title="按住右修正" onPress={() => void steerCruise("right")} onRelease={() => void steerCruise("center")} disabled={cruisePending !== ""} /></div> : null}
             <small className="mobile-cruise-note">点击开始会自动启动底盘并切换 real；停止或断线后自动重新锁定。</small>
@@ -733,25 +752,25 @@ export default function MobileCaptureConsole() {
         <div className="mobile-page mobile-archive-page">
           {selectedGallery ? (
             <section className="mobile-gallery-viewer">
-              <button className="mobile-viewer-back" type="button" onClick={closeGallery}><ArrowLeftIcon />返回数据集列表</button>
-              <div className="mobile-viewer-heading"><div><span className="mobile-eyebrow">DATASET VIEWER</span><h2>{selectedGallery.scene}</h2></div><span>{galleryModeLabel(selectedGallery.stream_mode)}</span></div>
+              <button className="mobile-viewer-back" type="button" onClick={closeGallery}><ArrowLeftIcon />返回采集记录</button>
+              <div className="mobile-viewer-heading"><div><span className="mobile-eyebrow">采集图片</span><h2>{selectedGallery.scene}</h2></div><span>{galleryModeLabel(selectedGallery.stream_mode)}</span></div>
               <div className="mobile-viewer-image-card" onTouchStart={handleViewerTouchStart} onTouchEnd={handleViewerTouchEnd}>
-                {galleryViewerLoading ? <div className="mobile-viewer-loading"><ArrowPathIcon className="mobile-spin" />正在读取数据集…</div> : galleryFrames[selectedFrameIndex] ? <img src={galleryFrameUrl(token, selectedGallery.group, galleryFrames[selectedFrameIndex].name)} alt={`${selectedGallery.scene} 第 ${selectedFrameIndex + 1} 张`} /> : <div className="mobile-viewer-loading"><ArchiveBoxIcon />这个数据集没有可读取的图片</div>}
+                {galleryViewerError ? <div className="mobile-viewer-loading" role="alert"><ExclamationTriangleIcon /><span>图片加载失败：{galleryViewerError}</span><button type="button" className="mobile-secondary-action" onClick={() => void openGallery(selectedGallery)}>重试加载图片</button></div> : galleryViewerLoading ? <div className="mobile-viewer-loading"><ArrowPathIcon className="mobile-spin" />正在加载图片…</div> : galleryFrames[selectedFrameIndex] ? <img src={galleryFrameUrl(token, selectedGallery.group, galleryFrames[selectedFrameIndex].name)} alt={`${selectedGallery.scene} 第 ${selectedFrameIndex + 1} 张`} /> : <div className="mobile-viewer-loading"><ArchiveBoxIcon />这条记录没有可查看的图片</div>}
               </div>
               <div className="mobile-viewer-controls">
                 <button type="button" onClick={() => moveGalleryFrame(-1)} disabled={selectedFrameIndex <= 0 || galleryViewerLoading}><ChevronLeftIcon /><span>上一张</span></button>
                 <div><strong>{galleryFrames.length ? selectedFrameIndex + 1 : 0}</strong><span> / {galleryFrames.length}</span><small>{galleryFrames[selectedFrameIndex] ? `${formatCaptureTime(galleryFrames[selectedFrameIndex].captured_at)} · ${formatCaptureSize(galleryFrames[selectedFrameIndex].size_bytes)}` : "等待图片"}</small></div>
                 <button type="button" onClick={() => moveGalleryFrame(1)} disabled={selectedFrameIndex >= galleryFrames.length - 1 || galleryViewerLoading}><span>下一张</span><ChevronRightIcon /></button>
               </div>
-              <div className="mobile-viewer-note"><span>{selectedGallery.frames_saved} 张 · {formatCaptureSize(selectedGallery.total_size_bytes)} · {selectedGallery.manifest_name}</span><p>{selectedGallery.note || "没有备注"}</p><small>{selectedGallery.integrity_ok ? "完整性检查通过 · 左右滑动切换图片" : `完整性异常：manifest 中有 ${selectedGallery.missing_frames} 张文件缺失`}</small></div>
+              <div className="mobile-viewer-note"><span>{selectedGallery.frames_saved} 张 · {formatCaptureSize(selectedGallery.total_size_bytes)} · {selectedGallery.manifest_name}</span><p>{selectedGallery.note || "没有备注"}</p><small>{selectedGallery.integrity_ok ? "完整性检查通过 · 左右滑动切换图片" : `采集记录中有 ${selectedGallery.missing_frames} 张图片缺失`}</small></div>
             </section>
           ) : <>
-            <section className="mobile-archive-hero"><span className="mobile-eyebrow">LATEST CAPTURE</span><h2>{capture?.scene || "还没有采集任务"}</h2><p>{capture?.manifest_path || "开始一段采集后，这里会显示 manifest 和最近一帧。"}</p></section>
-            {latestFrameUrl ? <img className="mobile-latest-frame" src={latestFrameUrl} alt="最近保存的采集帧" /> : <div className="mobile-empty-state"><ArchiveBoxIcon /><strong>等待第一段现场数据</strong><span>采集完成的原始帧会保存在小车上，并按场景和日期分组。</span></div>}
+            <section className="mobile-archive-hero"><span className="mobile-eyebrow">最近采集</span><h2>{capture?.scene || "还没有采集任务"}</h2><p>{capture?.manifest_path ? "图片已保存在小车，可从下方记录查看。" : "采集完成后可在这里查看图片。"}</p></section>
+            {latestFrameUrl ? <img className="mobile-latest-frame" src={latestFrameUrl} alt="最近保存的采集帧" /> : <div className="mobile-empty-state"><ArchiveBoxIcon /><strong>暂无采集图片</strong><span>采集完成的原始帧会保存在小车上，并按场景和日期分组。</span></div>}
             <div className="mobile-archive-stats"><Metric label="已保存" value={`${capture?.frames_saved ?? 0} 帧`} /><Metric label="采样间隔" value={`${capture?.interval_seconds ?? "--"} 秒`} /><Metric label="状态" value={capture?.running ? "进行中" : "已停止"} tone={capture?.running ? "good" : "neutral"} /></div>
             <section className="mobile-history-card">
-              <div className="mobile-section-heading"><div><span className="mobile-eyebrow">CAPTURE HISTORY</span><h2>历史采集段</h2></div><strong>{gallery.length}</strong></div>
-              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <div className="mobile-history-item" key={item.group}><button className="mobile-history-open" type="button" onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧 · {formatCaptureSize(item.total_size_bytes)}</span><span className={item.integrity_ok ? "is-ok" : "is-alert"}>{item.integrity_ok ? "完整" : `缺 ${item.missing_frames} 张`}</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button><button className="mobile-history-delete" type="button" aria-label={`删除 ${item.scene}`} onClick={() => void deleteGallery(item.group)} disabled={deletingGroup !== "" || (!!capture?.running && capture.manifest_path?.endsWith(`${item.group}.csv`) === true)}><TrashIcon /></button></div>)}</div> : <div className="mobile-history-empty">还没有找到已完成的 manifest。</div>}
+              <div className="mobile-section-heading"><div><span className="mobile-eyebrow">采集记录</span><h2>历史采集</h2></div><strong>{gallery.length}</strong></div>
+              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <div className="mobile-history-item" key={item.group}><button className="mobile-history-open" type="button" onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧 · {formatCaptureSize(item.total_size_bytes)}</span><span className={item.integrity_ok ? "is-ok" : "is-alert"}>{item.integrity_ok ? "完整" : `缺 ${item.missing_frames} 张`}</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button><button className="mobile-history-delete" type="button" aria-label={`删除 ${item.scene}`} onClick={() => void deleteGallery(item.group)} disabled={deletingGroup !== "" || (!!capture?.running && capture.manifest_path?.endsWith(`${item.group}.csv`) === true)}><TrashIcon /></button></div>)}</div> : <div className="mobile-history-empty">暂无采集记录，完成采集后会显示在这里。</div>}
             </section>
           </>}
           {capture?.last_error && !isTransientCaptureWarning(capture.last_error) ? <div className="mobile-inline-error"><ExclamationTriangleIcon />{capture.last_error}</div> : null}
