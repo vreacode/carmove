@@ -724,7 +724,7 @@ async def api_stream_fallback(
     header_token = _extract_token(authorization)
     if header_token != settings.auth_token and token != settings.auth_token:
         raise HTTPException(status_code=403, detail="invalid token")
-    selected_mode = mode if mode in {"visible_raw", "ir_raw"} else "visible_raw"
+    selected_mode = mode if mode in {"visible_raw", "ir_raw", "annotated"} else "visible_raw"
 
     async def generate():
         async with bridge.client.stream(

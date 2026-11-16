@@ -73,3 +73,8 @@
 
 .dashboard-workspace [class*="bg-rose-"], .dashboard-workspace [class*="bg-red-"] { background-color: rgb(var(--fl-error-container)); }
 .dashboard-workspace [class*="text-rose-"], .dashboard-workspace [class*="text-red-"] { color: rgb(var(--fl-error)); }
+.video-retry { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin-top: 14px; padding: 7px 14px; border: 0; border-radius: 18px; background: rgb(var(--fl-primary)); color: rgb(var(--fl-on-primary)); font-size: 12px; cursor: pointer; }
+.video-retry svg { width: 15px; height: 15px; }
+.workspace-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; border-radius: 16px; background: rgb(var(--fl-error-container)); color: rgb(var(--fl-on-error-container)); font-size: 13px; }
+.workspace-error .icon-button { color: inherit; }
+.map-load-error { display: grid; min-height: 220px; align-content: center; justify-items: center; gap: 16px; padding: 24px; color: rgb(var(--fl-error)); font-size: 13px; text-align: center; }

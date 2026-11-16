@@ -8,18 +8,29 @@ export const saveToken = (token: string) => localStorage.setItem("dashboard_toke
 export const clearToken = () => localStorage.removeItem("dashboard_token");
 
 export async function apiFetch<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (options.body != null && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers ?? {}),
-    },
+    headers,
   });
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `${response.status}`);
+    const body = await response.text();
+    let detail = response.headers.get("content-type")?.includes("text/html") ? "" : body;
+    try {
+      const parsed = JSON.parse(body);
+      if (typeof parsed?.detail === "string") detail = parsed.detail;
+      else if (Array.isArray(parsed?.detail)) detail = parsed.detail.map((item: { loc?: unknown[]; msg?: unknown }) => {
+        const field = Array.isArray(item?.loc) ? item.loc.filter((part) => part !== "body").join(".") : "";
+        return [field, typeof item?.msg === "string" ? item.msg : "参数无效"].filter(Boolean).join("：");
+      }).join("；");
+      else if (typeof parsed?.message === "string") detail = parsed.message;
+      else detail = "";
+    } catch { /* Non-JSON error responses may contain a useful plain message. */ }
+    throw new Error(detail || `请求失败（${response.status}）`);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 

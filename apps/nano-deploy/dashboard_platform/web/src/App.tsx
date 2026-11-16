@@ -9,8 +9,10 @@ import {
   StopCircleIcon,
   ChevronRightIcon,
   TrashIcon,
+  XMarkIcon,
 } from "./components/FlClashIcons";
 import { Panel } from "./components/Panel";
+import { pgmArrayBufferToDataUrl } from "./mapImage";
 import { AlgorithmLibrary } from "./components/AlgorithmLibrary";
 import type { Algorithm } from "./algorithms";
 import { SidebarMenu, type SidebarTab } from "./components/SidebarMenu";
@@ -125,6 +127,8 @@ function App() {
   const [mappingWorkspace, setMappingWorkspace] = useState<"indoor" | "outdoor">("indoor");
   const [outdoorBackend, setOutdoorBackend] = useState<"glim" | "fastlio2">("glim");
   const [mapLoading, setMapLoading] = useState(false);
+  const [mapError, setMapError] = useState("");
+  const [mapLoadRevision, setMapLoadRevision] = useState(0);
   const [navigationState, setNavigationState] = useState<NavigationState | null>(null);
   const [mapPointMode, setMapPointMode] = useState<"none" | "initial" | "goal">("none");
   const [initialPoint, setInitialPoint] = useState<MapPoint | null>(null);
@@ -363,20 +367,25 @@ function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !selectedMapName) return;
-    let cancelled = false;
+    const request = new AbortController();
+    setMapMetadata(null);
+    setMapImageUrl("");
+    setInitialPoint(null);
+    setGoalPoint(null);
+    setMapPointMode("none");
+    setMapError("");
+    if (!token || !selectedMapName) { setMapLoading(false); return; }
     setMapLoading(true);
-    void loadMap(selectedMapName)
-      .catch((err) => {
-        if (!cancelled) setError(describeError(err));
+    void loadMap(selectedMapName, request.signal)
+      .then(({ metadata, imageUrl }) => {
+        if (request.signal.aborted) return;
+        setMapMetadata(metadata);
+        setMapImageUrl(imageUrl);
       })
-      .finally(() => {
-        if (!cancelled) setMapLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, selectedMapName]);
+      .catch((err) => { if (!request.signal.aborted) setMapError(describeError(err)); })
+      .finally(() => { if (!request.signal.aborted) setMapLoading(false); });
+    return () => request.abort();
+  }, [token, selectedMapName, mapLoadRevision]);
 
   useEffect(() => {
     if (!token || activeTab !== "navigation") return;
@@ -879,25 +888,23 @@ function App() {
     }
   }
 
-  async function loadMap(mapName: string) {
-    const metadata = await apiFetch<MapMetadata>(`/api/maps/${encodeURIComponent(mapName)}`, token);
-    setMapMetadata(metadata);
-    const response = await fetch(`${API_BASE}/api/maps/${encodeURIComponent(mapName)}/pgm`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) {
-      throw new Error((await response.text()) || "failed to load map image");
+  async function loadMap(mapName: string, signal: AbortSignal) {
+    const [metadata, response] = await Promise.all([
+      apiFetch<MapMetadata>(`/api/maps/${encodeURIComponent(mapName)}`, token, { signal }),
+      fetch(`${API_BASE}/api/maps/${encodeURIComponent(mapName)}/pgm`, { signal, headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    if (!response.ok) throw new Error("地图图像加载失败，请重试。");
+    if (metadata.name !== mapName || !Number.isFinite(metadata.resolution) || metadata.resolution <= 0 || !Array.isArray(metadata.origin) || metadata.origin.length < 3 || metadata.origin.some((n) => !Number.isFinite(n))) {
+      throw new Error("地图元数据无效，请检查地图文件。");
     }
     const buffer = await response.arrayBuffer();
-    const imageUrl = pgmArrayBufferToDataUrl(buffer);
-    setMapImageUrl((prev) => {
-      if (prev.startsWith("blob:")) URL.revokeObjectURL(prev);
-      return imageUrl;
-    });
+    return { metadata, imageUrl: pgmArrayBufferToDataUrl(buffer, metadata) };
   }
 
+  const mapReady = !mapLoading && !!mapImageUrl && mapMetadata?.name === selectedMapName;
+
   function mapPointFromEvent(event: MouseEvent<HTMLDivElement>): MapPoint | null {
-    if (!mapMetadata?.width || !mapMetadata.height || !mapMetadata.resolution || mapMetadata.origin.length < 2) return null;
+    if (!mapReady || !mapMetadata?.width || !mapMetadata.height || !mapMetadata.resolution || mapMetadata.origin.length < 2) return null;
     const rect = event.currentTarget.getBoundingClientRect();
     const pixelX = Math.max(0, Math.min(mapMetadata.width, ((event.clientX - rect.left) / rect.width) * mapMetadata.width));
     const pixelY = Math.max(0, Math.min(mapMetadata.height, ((event.clientY - rect.top) / rect.height) * mapMetadata.height));
@@ -923,7 +930,7 @@ function App() {
   }
 
   function handleMapClick(event: MouseEvent<HTMLDivElement>) {
-    if (mapPointMode === "none") return;
+    if (!mapReady || mapPointMode === "none") return;
     const point = mapPointFromEvent(event);
     if (!point) return;
     if (mapPointMode === "initial") setInitialPoint(point);
@@ -931,7 +938,7 @@ function App() {
   }
 
   async function publishInitialPose() {
-    if (!initialPoint) return;
+    if (!mapReady || !initialPoint) return;
     try {
       setNavigationPending("initial");
       setError("");
@@ -944,7 +951,7 @@ function App() {
   }
 
   async function sendNavigationGoal() {
-    if (!goalPoint) return;
+    if (!mapReady || !goalPoint) return;
     try {
       setNavigationPending("goal");
       setError("");
@@ -1047,6 +1054,7 @@ function App() {
       </header>
 
       <div className="space-y-5">
+        {activeTab !== "live" && error && <div className="workspace-error" role="alert"><span>{error}</span><button type="button" className="icon-button" aria-label="关闭错误提示" onClick={() => setError("")}><XMarkIcon aria-hidden="true" /></button></div>}
         {activeTab === "algorithms" ? <AlgorithmLibrary status={status} pending={!!modelPending} onLoadModel={loadAlgorithmModel} onOpenPipeline={openAlgorithmPipeline} /> : null}
         {activeTab === "live" ? <LiveWorkspace
           token={token} status={status} error={error} resourceHistory={resourceHistory}
@@ -1089,6 +1097,7 @@ function App() {
                 </div>
                 <div className="space-y-4">
                   {mappingWorkspace === "indoor" ? <select
+                      aria-label="导航地图"
                       value={selectedMapName}
                       onChange={(event) => {
                         setSelectedMapName(event.target.value);
@@ -1236,8 +1245,8 @@ function App() {
                     <span className="rounded-full border border-base bg-panel px-2 py-1 text-[11px] text-disabled">{navigationState?.goal_status || "idle"}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
-                    <button onClick={() => setMapPointMode(mapPointMode === "initial" ? "none" : "initial")} className={classNames("rounded-lg border px-2 py-2 text-xs", mapPointMode === "initial" ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel text-tertiary")}>设置起点</button>
-                    <button onClick={() => setMapPointMode(mapPointMode === "goal" ? "none" : "goal")} className={classNames("rounded-lg border px-2 py-2 text-xs", mapPointMode === "goal" ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel text-tertiary")}>设置目标</button>
+                    <button disabled={!mapReady} onClick={() => setMapPointMode(mapPointMode === "initial" ? "none" : "initial")} className={classNames("rounded-lg border px-2 py-2 text-xs", mapPointMode === "initial" ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel text-tertiary")}>设置起点</button>
+                    <button disabled={!mapReady} onClick={() => setMapPointMode(mapPointMode === "goal" ? "none" : "goal")} className={classNames("rounded-lg border px-2 py-2 text-xs", mapPointMode === "goal" ? "border-accent-300 bg-accent-100 text-accent-700" : "border-base bg-panel text-tertiary")}>设置目标</button>
                     <button onClick={() => { setMapPointMode("none"); setInitialPoint(null); setGoalPoint(null); }} className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary">清除点位</button>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-3">
@@ -1249,8 +1258,8 @@ function App() {
                     </label>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button disabled={!initialPoint || navigationPending !== ""} onClick={() => void publishInitialPose()} className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "initial" ? "发布中..." : "发布起点"}</button>
-                    <button disabled={!goalPoint || navigationPending !== "" || !navigationState?.navigation_running} onClick={() => void sendNavigationGoal()} className="rounded-lg bg-accent-500 px-2 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "goal" ? "发送中..." : "发送目标"}</button>
+                    <button disabled={!mapReady || !initialPoint || navigationPending !== ""} onClick={() => void publishInitialPose()} className="rounded-lg border border-base bg-panel px-2 py-2 text-xs text-tertiary disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "initial" ? "发布中..." : "发布起点"}</button>
+                    <button disabled={!mapReady || !goalPoint || navigationPending !== "" || !navigationState?.navigation_running} onClick={() => void sendNavigationGoal()} className="rounded-lg bg-accent-500 px-2 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "goal" ? "发送中..." : "发送目标"}</button>
                   </div>
                   <button disabled={navigationPending !== "" || !navigationState?.goal} onClick={() => void cancelNavigationGoal()} className="mt-2 w-full rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40">{navigationPending === "cancel" ? "取消中..." : "取消当前目标"}</button>
                 </div> : <div className="mt-5 grid grid-cols-4 gap-2 rounded-xl border border-base bg-card/50 p-4">
@@ -1290,6 +1299,8 @@ function App() {
                       )}
                     >
                       <button
+                        aria-label={`选择地图 ${item.name}`}
+                        aria-pressed={selectedMapName === item.name}
                         onClick={() => {
                           setSelectedMapName(item.name);
                           setMapNameInput(item.name);
@@ -1330,11 +1341,12 @@ function App() {
                   className={classNames("relative overflow-hidden rounded-xl border border-base bg-page/90", mapPointMode !== "none" && "cursor-crosshair")}
                   style={{ aspectRatio: mapMetadata?.width && mapMetadata?.height ? `${mapMetadata.width} / ${mapMetadata.height}` : "16 / 10" }}
                 >
-                  {mapLoading ? <div className="flex aspect-[16/10] items-center justify-center text-sm text-disabled">地图加载中...</div> : null}
+                  {mapLoading ? <div role="status" className="flex aspect-[16/10] items-center justify-center text-sm text-disabled">地图加载中...</div> : null}
+                  {!mapLoading && mapError && <div className="map-load-error" role="alert"><p>地图加载失败：{mapError}</p><button type="button" className="live-button" onClick={() => setMapLoadRevision((n) => n + 1)}>重新加载地图</button></div>}
                   {!mapLoading && mapImageUrl ? <img alt={`map ${mapMetadata?.name ?? ""}`} src={mapImageUrl} className="absolute inset-0 h-full w-full object-fill" /> : null}
                   {!mapLoading && mapImageUrl && initialPoint ? <div className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-sky-500 px-2 py-1 text-[10px] font-semibold text-white shadow" style={mapPointPosition(initialPoint) || undefined}>起点</div> : null}
                   {!mapLoading && mapImageUrl && goalPoint ? <div className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent-500 px-2 py-1 text-[10px] font-semibold text-white shadow" style={mapPointPosition(goalPoint) || undefined}>目标</div> : null}
-                  {!mapLoading && !mapImageUrl ? <div className="flex aspect-[16/10] items-center justify-center text-sm text-muted">请选择地图。</div> : null}
+                  {!mapLoading && !mapImageUrl && !mapError ? <div className="flex aspect-[16/10] items-center justify-center text-sm text-muted">请选择地图。</div> : null}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
                   <span>地图点击模式：{mapPointMode === "initial" ? "设置起点" : mapPointMode === "goal" ? "设置目标" : "未选择"}</span>
@@ -1625,7 +1637,7 @@ function App() {
                   </div>
                 ))}
               </div>
-              {error ? <p className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">失败提示：{error}</p> : null}
+
             </Panel>
           </div>
         </div> : null}
@@ -1729,71 +1741,3 @@ function ThemeToggle() {
 }
 
 export default App;
-
-function pgmArrayBufferToDataUrl(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const { width, height, data } = parsePgm(bytes);
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    throw new Error("canvas 2d context is unavailable");
-  }
-  const image = ctx.createImageData(width, height);
-  for (let index = 0; index < data.length; index += 1) {
-    const value = data[index];
-    const offset = index * 4;
-    image.data[offset] = value;
-    image.data[offset + 1] = value;
-    image.data[offset + 2] = value;
-    image.data[offset + 3] = 255;
-  }
-  ctx.putImageData(image, 0, 0);
-  return canvas.toDataURL("image/png");
-}
-
-function parsePgm(bytes: Uint8Array): { width: number; height: number; data: Uint8Array } {
-  let offset = 0;
-  const readToken = (): string => {
-    while (offset < bytes.length) {
-      const value = bytes[offset];
-      if (value === 35) {
-        while (offset < bytes.length && bytes[offset] !== 10) offset += 1;
-      }
-      if (value > 32) break;
-      offset += 1;
-    }
-    const start = offset;
-    while (offset < bytes.length && bytes[offset] > 32) offset += 1;
-    return new TextDecoder().decode(bytes.slice(start, offset));
-  };
-
-  const magic = readToken();
-  const width = Number(readToken());
-  const height = Number(readToken());
-  const maxValue = Number(readToken());
-  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(maxValue)) {
-    throw new Error("invalid pgm header");
-  }
-  while (offset < bytes.length && bytes[offset] <= 32) offset += 1;
-  if (magic === "P5") {
-    const raw = bytes.slice(offset, offset + width * height);
-    if (maxValue === 255) return { width, height, data: raw };
-    const scaled = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i += 1) {
-      scaled[i] = Math.round((raw[i] / maxValue) * 255);
-    }
-    return { width, height, data: scaled };
-  }
-  if (magic === "P2") {
-    const text = new TextDecoder().decode(bytes.slice(offset));
-    const tokens = text.split(/\s+/).filter(Boolean);
-    const scaled = new Uint8Array(width * height);
-    for (let i = 0; i < scaled.length; i += 1) {
-      scaled[i] = Math.round((Number(tokens[i] ?? 0) / maxValue) * 255);
-    }
-    return { width, height, data: scaled };
-  }
-  throw new Error(`unsupported pgm format: ${magic}`);
-}
