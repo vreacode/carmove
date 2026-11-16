@@ -202,6 +202,7 @@ test("deleting a capture group invalidates a pending background refresh", async 
   await expect.poll(async () => (await reads(page, "/api/capture/gallery")).filter((r) => r.active).length).toBe(1);
   const backgroundIndex = (await reads(page, "/api/capture/gallery")).length - 1;
   await page.getByRole("button", { name: "删除 场景3", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(page.getByRole("button", { name: /场景3.*点击查看全部图片/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toBeEnabled();
   expect((await reads(page, "/api/capture/gallery"))[backgroundIndex].aborted).toBe(true);

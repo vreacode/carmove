@@ -83,3 +83,8 @@
 .mobile-page > * { min-width: 0; max-width: 100%; }
 .mobile-history-list { grid-template-columns: minmax(0, 1fr); }
 .mobile-history-item { min-width: 0; }
+.delete-confirmation .settings-dialog-heading > svg { width: 24px; height: 24px; flex: none; color: rgb(var(--fl-error)); }
+.delete-confirmation-name { max-height: 120px; overflow: auto; overflow-wrap: anywhere; font-size: 16px; font-weight: 600; color: rgb(var(--fl-on-surface)); }
+.delete-confirmation .live-button { min-height: 40px; padding: 9px 16px; border: 1px solid rgb(var(--fl-outline-variant)); border-radius: 20px; background: rgb(var(--fl-block)); color: rgb(var(--fl-on-surface)); font-size: 13px; cursor: pointer; }
+.delete-confirmation .live-button:disabled { cursor: not-allowed; opacity: .38; }
+.settings-dialog .live-button--delete { border-color: rgb(var(--fl-error-container)); background: rgb(var(--fl-error-container)); color: rgb(var(--fl-on-error-container)); }

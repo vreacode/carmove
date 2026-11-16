@@ -12,6 +12,7 @@ import {
   XMarkIcon,
 } from "./components/FlClashIcons";
 import { Panel } from "./components/Panel";
+import { DeleteConfirmationDialog } from "./components/DeleteConfirmationDialog";
 import { pgmArrayBufferToDataUrl } from "./mapImage";
 import { AlgorithmLibrary } from "./components/AlgorithmLibrary";
 import type { Algorithm } from "./algorithms";
@@ -176,6 +177,8 @@ function App() {
   const [modePending, setModePending] = useState<"" | "dry_run" | "real">("");
   const [refreshingMaps, setRefreshingMaps] = useState(false);
   const [deletingMapName, setDeletingMapName] = useState("");
+  const [mapToDelete, setMapToDelete] = useState<string | null>(null);
+  const mapListRefreshRef = useRef<HTMLButtonElement>(null);
   const [useFallback, setUseFallback] = useState(false);
   const cruiseSteeringRequestRef = useRef<Promise<void> | null>(null);
   const cruiseSteeringDesiredRef = useRef<"center" | "left" | "right">("center");
@@ -749,11 +752,14 @@ function App() {
     try {
       setDeletingMapName(mapName);
       setError("");
+      if (status?.current_map_name === mapName && (status.mapping_running || status.navigation_running)) {
+        throw new Error("这张地图正在使用，请停止相关任务后再删除。");
+      }
       await apiFetch(`/api/maps/${encodeURIComponent(mapName)}`, token, { method: "DELETE" });
-      const payload = await apiFetch<{ items: MapEntry[] }>("/api/maps", token);
-      setMaps(payload.items);
+      const remaining = maps.filter((item) => item.name !== mapName);
+      setMaps((current) => current.filter((item) => item.name !== mapName));
       if (selectedMapName === mapName) {
-        const replacement = payload.items[0]?.name || "";
+        const replacement = remaining[0]?.name || "";
         setSelectedMapName(replacement);
         setMapNameInput(replacement);
         setMapMetadata(null);
@@ -762,7 +768,7 @@ function App() {
         setGoalPoint(null);
       }
     } catch (err) {
-      setError(describeError(err));
+      throw new Error(describeError(err));
     } finally {
       setDeletingMapName("");
     }
@@ -945,7 +951,7 @@ function App() {
   if (!token) {
     return (
       <div className="dashboard-workspace workspace-login">
-        <div className="workspace-login-card">
+        <form className="workspace-login-card" onSubmit={(event) => { event.preventDefault(); if (!loginPending) void login(); }}>
           <div className="mb-8">
             <p className="text-sm uppercase tracking-[0.15em] text-accent-600">CarMove / Console</p>
             <h1 className="mt-3 text-3xl font-semibold text-primary">登录控制台</h1>
@@ -956,7 +962,7 @@ function App() {
               className="w-full rounded-xl border border-base bg-card px-4 py-3 text-secondary outline-none ring-accent-300 transition focus:ring-2"
               placeholder="用户名"
               aria-label="用户名"
-              autoComplete="username"
+              autoComplete="username" required disabled={loginPending}
               value={loginForm.username}
               onChange={(event) => setLoginForm((prev) => ({ ...prev, username: event.target.value }))}
             />
@@ -965,20 +971,20 @@ function App() {
               className="w-full rounded-xl border border-base bg-card px-4 py-3 text-secondary outline-none ring-accent-300 transition focus:ring-2"
               placeholder="密码"
               aria-label="密码"
-              autoComplete="current-password"
+              autoComplete="current-password" required disabled={loginPending}
               value={loginForm.password}
               onChange={(event) => setLoginForm((prev) => ({ ...prev, password: event.target.value }))}
             />
             <button
-              onClick={login}
+              type="submit"
               disabled={loginPending}
               className="w-full rounded-lg bg-accent-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-accent-700 disabled:opacity-60"
             >
               {loginPending ? "登录中..." : "登录"}
             </button>
-            {error ? <p className="text-sm text-red-400">{error}</p> : null}
+            {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
           </div>
-        </div>
+        </form>
       </div>
     );
   }
@@ -1237,7 +1243,7 @@ function App() {
             className="min-h-[560px] xl:col-span-8"
             right={
               <div className="flex items-center gap-2">
-                <button onClick={() => void refreshMaps()} className="rounded-md border border-base bg-panel px-3 py-1.5 text-[13px] font-medium text-tertiary hover:bg-card transition-colors">
+                <button ref={mapListRefreshRef} onClick={() => void refreshMaps()} className="rounded-md border border-base bg-panel px-3 py-1.5 text-[13px] font-medium text-tertiary hover:bg-card transition-colors">
                   {refreshingMaps ? "刷新中..." : "刷新地图列表"}
                 </button>
               </div>
@@ -1272,7 +1278,7 @@ function App() {
                         aria-label={`删除地图 ${item.name}`}
                         title={status?.current_map_name === item.name && (status.mapping_running || status.navigation_running) ? "运行中的当前地图不能删除" : "删除地图"}
                         disabled={deletingMapName !== "" || (status?.current_map_name === item.name && (status.mapping_running || status.navigation_running))}
-                        onClick={() => void deleteMap(item.name)}
+                        onClick={() => setMapToDelete(item.name)}
                         className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         <TrashIcon className="h-4 w-4" />
@@ -1614,6 +1620,7 @@ function App() {
       </div>
       </DataMotionProvider>
       </main>
+      {mapToDelete !== null ? <DeleteConfirmationDialog title="删除地图" name={mapToDelete} description="将删除这张地图及对应文件，删除后无法恢复。" fallbackFocus={mapListRefreshRef} onConfirm={() => deleteMap(mapToDelete)} onClose={() => setMapToDelete(null)} /> : null}
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
   WifiIcon,
 } from "./components/FlClashIcons";
 import { VideoStream } from "./components/VideoStream";
+import { DeleteConfirmationDialog } from "./components/DeleteConfirmationDialog";
 import { useDeviceStatus } from "./hooks/useDeviceStatus";
 import { usePolledResource } from "./hooks/usePolledResource";
 import { usePaginatedGallery } from "./hooks/usePaginatedGallery";
@@ -243,9 +244,9 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
       <h1>小车控制台</h1>
       <p className="mobile-auth-copy">查看实时画面、采集图片和管理记录。</p>
       <form className="mobile-auth-form" onSubmit={submit}>
-        <label>账号<input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} autoComplete="username" /></label>
-        <label>密码<input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="current-password" /></label>
-        {error ? <div className="mobile-inline-error"><ExclamationTriangleIcon />{error}</div> : null}
+        <label>账号<input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} autoComplete="username" required disabled={pending} /></label>
+        <label>密码<input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="current-password" required disabled={pending} /></label>
+        {error ? <div role="alert" className="mobile-inline-error"><ExclamationTriangleIcon />{error}</div> : null}
         <button className="mobile-primary-button" disabled={pending}>{pending ? "正在登录…" : "登录"}</button>
       </form>
       <p className="mobile-auth-foot"><WifiIcon /> 支持局域网或 Tailscale 连接</p>
@@ -282,6 +283,8 @@ export default function MobileCaptureConsole() {
   const [durationMinutes, setDurationMinutes] = useState(5);
   const [pending, setPending] = useState<"start" | "stop" | "snapshot" | "refresh" | "">("");
   const [deletingGroup, setDeletingGroup] = useState("");
+  const [groupToDelete, setGroupToDelete] = useState<CaptureGalleryItem | null>(null);
+  const galleryHeadingRef = useRef<HTMLHeadingElement>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [cruiseSpeed, setCruiseSpeed] = useState<(typeof cruiseSpeeds)[number]>("low");
@@ -409,13 +412,16 @@ export default function MobileCaptureConsole() {
     try {
       setDeletingGroup(group);
       setError("");
+      if (capture?.running && capture.manifest_path?.endsWith(`${group}.csv`)) {
+        throw new Error("这组图片正在采集，请停止采集后再删除。");
+      }
       await apiFetch(`/api/capture/gallery/${encodeURIComponent(group)}`, token, { method: "DELETE" });
       captureGallery.remove(group);
       if (selectedGallery?.group === group) closeGallery();
       setToast("采集记录已删除");
-      await captureGallery.refresh();
+      void captureGallery.refresh();
     } catch (err) {
-      setError(explainMobileError(err));
+      throw new Error(explainMobileError(err));
     } finally {
       setDeletingGroup("");
     }
@@ -642,7 +648,7 @@ export default function MobileCaptureConsole() {
       </section>
 
       {error ? <button className="mobile-error-banner" onClick={() => setError("")}><ExclamationTriangleIcon />{error}<span>×</span></button> : null}
-      {captureStatusError ? <button className="mobile-error-banner" role="status" onClick={() => setCaptureStatusError("")}><ExclamationTriangleIcon />{captureStatusError}<span>×</span></button> : null}
+      {captureStatusError ? <div role="status"><button className="mobile-error-banner" aria-label={`关闭状态提示：${captureStatusError}`} onClick={() => setCaptureStatusError("")}><ExclamationTriangleIcon />{captureStatusError}<span aria-hidden="true">×</span></button></div> : null}
       {toast ? <div className="mobile-toast"><CheckCircleIcon />{toast}</div> : null}
 
       {tab === "capture" ? (
@@ -738,8 +744,8 @@ export default function MobileCaptureConsole() {
             {latestFrameUrl ? <img className="mobile-latest-frame" src={latestFrameUrl} alt="最近保存的采集帧" /> : <div className="mobile-empty-state"><ArchiveBoxIcon /><strong>暂无采集图片</strong><span>采集完成的原始帧会保存在小车上，并按场景和日期分组。</span></div>}
             <div className="mobile-archive-stats"><Metric label="已保存" value={`${capture?.frames_saved ?? 0} 帧`} /><Metric label="采样间隔" value={`${capture?.interval_seconds ?? "--"} 秒`} /><Metric label="状态" value={capture?.running ? "进行中" : "已停止"} tone={capture?.running ? "good" : "neutral"} /></div>
             <section className="mobile-history-card">
-              <div className="mobile-section-heading"><div><span className="mobile-eyebrow">采集记录</span><h2>历史采集</h2></div><strong>已加载 {gallery.length} 条</strong></div>
-              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <div className="mobile-history-item" key={item.group}><button className="mobile-history-open" type="button" onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧 · {formatCaptureSize(item.total_size_bytes)}</span><span className={item.integrity_ok ? "is-ok" : "is-alert"}>{item.integrity_ok ? "完整" : `缺 ${item.missing_frames} 张`}</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button><button className="mobile-history-delete" type="button" aria-label={`删除 ${item.scene}`} onClick={() => void deleteGallery(item.group)} disabled={deletingGroup !== "" || (!!capture?.running && capture.manifest_path?.endsWith(`${item.group}.csv`) === true)}><TrashIcon /></button></div>)}</div> : captureGallery.error || captureGallery.loading ? null : <div className="mobile-history-empty">暂无采集记录，完成采集后会显示在这里。</div>}
+              <div className="mobile-section-heading"><div><span className="mobile-eyebrow">采集记录</span><h2 tabIndex={-1} ref={galleryHeadingRef}>历史采集</h2></div><strong>已加载 {gallery.length} 条</strong></div>
+              {gallery.length ? <div className="mobile-history-list">{gallery.map((item) => <div className="mobile-history-item" key={item.group}><button className="mobile-history-open" type="button" onClick={() => void openGallery(item)}>{item.latest_frame_name ? <img src={galleryFrameUrl(token, item.group)} alt={`${item.scene} 最近一帧`} loading="lazy" /> : null}<div className="mobile-history-item-body"><div className="mobile-history-item-top"><strong>{item.scene}</strong><span>{galleryModeLabel(item.stream_mode)} <ChevronRightIcon /></span></div><div className="mobile-history-meta"><span>{item.frames_saved} 帧 · {formatCaptureSize(item.total_size_bytes)}</span><span className={item.integrity_ok ? "is-ok" : "is-alert"}>{item.integrity_ok ? "完整" : `缺 ${item.missing_frames} 张`}</span><span>{formatCaptureTime(item.last_captured_at)}</span></div><p>{item.note || item.manifest_name}</p><small className="mobile-history-open-hint">点击查看全部图片</small></div></button><button className="mobile-history-delete" type="button" aria-label={`删除 ${item.scene}`} onClick={() => setGroupToDelete(item)} disabled={deletingGroup !== "" || (!!capture?.running && capture.manifest_path?.endsWith(`${item.group}.csv`) === true)}><TrashIcon /></button></div>)}</div> : captureGallery.error || captureGallery.loading ? null : <div className="mobile-history-empty">暂无采集记录，完成采集后会显示在这里。</div>}
               {captureGallery.error ? <div className="mobile-inline-error" role="alert"><div className="min-w-0 w-full"><p>记录加载失败：{captureGallery.error}</p><button type="button" className="mobile-secondary-action" disabled={captureGallery.loading !== ""} onClick={() => void captureGallery.retry()}>重试加载采集记录</button></div></div> : null}
               {captureGallery.loading === "refresh" || captureGallery.loading === "more" ? <p role="status">正在加载采集记录…</p> : null}
               {captureGallery.hasMore ? <button type="button" className="mobile-secondary-action" disabled={(captureGallery.loading !== "" && captureGallery.loading !== "background") || pending !== "" || deletingGroup !== ""} onClick={() => void captureGallery.loadMore()}>加载更多采集记录</button> : null}
@@ -771,6 +777,7 @@ export default function MobileCaptureConsole() {
         <button className={tab === "monitor" ? "is-active" : ""} onClick={() => setTab("monitor")}><ChartBarIcon /><span>监控</span></button>
         <button className={tab === "archive" ? "is-active" : ""} onClick={() => setTab("archive")}><ArchiveBoxIcon /><span>记录</span></button>
       </nav>
+      {groupToDelete ? <DeleteConfirmationDialog title="删除采集记录" name={groupToDelete.scene} description={`将删除这组采集图片和记录（${groupToDelete.frames_saved} 张），删除后无法恢复。`} fallbackFocus={galleryHeadingRef} onConfirm={() => deleteGallery(groupToDelete.group)} onClose={() => setGroupToDelete(null)} /> : null}
     </main>
   );
 }
