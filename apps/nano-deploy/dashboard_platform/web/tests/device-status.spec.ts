@@ -49,7 +49,10 @@ async function device(page: Page, httpError = false) {
   });
   return {
     mutations, errors,
-    ready: () => expect.poll(() => requested).toBeGreaterThan(0),
+    ready: async () => {
+      await expect.poll(() => requested).toBeGreaterThan(0);
+      await expect.poll(() => !!socket).toBe(true);
+    },
     send: (payload: unknown) => { latestPacket = JSON.stringify(payload); socket.send(latestPacket); },
     malformed: () => socket.send("{invalid"),
     disconnect: () => { latestPacket = undefined; socket.close(); },

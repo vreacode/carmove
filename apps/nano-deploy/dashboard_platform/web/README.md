@@ -21,7 +21,7 @@ npx playwright install chromium
 npx playwright test
 ```
 
-构建结果在 `dist/`。39 项浏览器测试使用模拟 HTTP 与 WebSocket，验证模型选择、设置弹窗、状态乱序、记录翻页、图片切换、控制请求契约、真实数据采样逻辑、主题颜色与键盘操作，不操作实车。
+构建结果在 `dist/`。48 项浏览器测试使用模拟 HTTP 与 WebSocket，验证模型选择、设置弹窗、状态乱序、刷新超时恢复、记录翻页、图片切换、控制请求契约、真实数据采样逻辑、主题颜色与键盘操作，不操作实车。
 
 如需重新生成默认主题：
 
@@ -37,6 +37,8 @@ npm run generate:theme
 - `src/hooks/useVideoConnection.ts`：可取消的视频协商、重试与备用画面。
 - `src/hooks/useDeviceStatus.ts`：桌面与手机的状态接收、断线处理及初始请求取消。
 - `src/hooks/useMediaGallery.ts`：录像、照片和检测记录的翻页、去重及重试。
+- `src/hooks/usePaginatedGallery.ts`：桌面和手机共用的列表请求、取消、去重及翻页。
+- `src/hooks/usePolledResource.ts`：只读状态查询的串行刷新、超时和操作回执处理。
 - `src/mapImage.ts`：地图图片解码和尺寸检查。
 - `src/components/ResourceTrends.tsx`、`hooks/useResourceHistory.ts`：会话采样与资源图表。
 - `src/flclash-theme.css`、`src/flclash-surfaces.css`：生成的颜色角色和上游表面样式。

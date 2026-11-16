@@ -20,6 +20,7 @@ import { LiveWorkspace } from "./components/LiveWorkspace";
 import { useReconnectingWebSocket } from "./hooks/useReconnectingWebSocket";
 import { useDeviceStatus } from "./hooks/useDeviceStatus";
 import { useMediaGallery } from "./hooks/useMediaGallery";
+import { usePolledResource } from "./hooks/usePolledResource";
 import { AnimatedNumber, DataMotionProvider } from "./components/DataMotion";
 import { ResourceTrends } from "./components/ResourceTrends";
 import { useResourceHistory } from "./hooks/useResourceHistory";
@@ -276,27 +277,11 @@ function App() {
     },
   });
 
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    const refreshCameraStatus = () => {
-      void apiFetch<SiyiCameraStatus>("/api/camera/status", token)
-        .then((payload) => {
-          if (!cancelled) setCameraStatus(payload);
-        })
-        .catch((err) => {
-          if (!cancelled) {
-            setCameraStatus({ enabled: true, connected: false, error: describeError(err) });
-          }
-        });
-    };
-    refreshCameraStatus();
-    const timer = window.setInterval(refreshCameraStatus, 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [token]);
+  usePolledResource<SiyiCameraStatus>({
+    token, path: "/api/camera/status", interval: 5000,
+    onValue: setCameraStatus,
+    onError: (err) => setCameraStatus({ enabled: true, connected: false, error: describeError(err) }),
+  });
 
   useEffect(() => {
     if (!token || !cruiseActive) return;
@@ -367,27 +352,11 @@ function App() {
     return () => request.abort();
   }, [token, selectedMapName, mapLoadRevision]);
 
-  useEffect(() => {
-    if (!token || activeTab !== "navigation") return;
-    let cancelled = false;
-    const refreshNavigationState = () => {
-      void apiFetch<NavigationState>("/api/navigation/status", token)
-        .then((payload) => {
-          if (!cancelled) setNavigationState(payload);
-        })
-        .catch(() => {
-          if (!cancelled) setNavigationState(null);
-        });
-    };
-    refreshNavigationState();
-    const timer = window.setInterval(refreshNavigationState, 1500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [token, activeTab]);
-
-
+  const navigationPoll = usePolledResource<NavigationState>({
+    token, path: "/api/navigation/status", interval: 1500, enabled: activeTab === "navigation",
+    onValue: setNavigationState,
+    onError: () => setNavigationState(null),
+  });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -941,7 +910,7 @@ function App() {
       setNavigationPending("goal");
       setError("");
       const payload = await apiFetch<NavigationState>("/api/navigation/goal", token, { method: "POST", body: JSON.stringify(goalPoint) });
-      setNavigationState(payload);
+      navigationPoll.receive(payload);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -954,7 +923,7 @@ function App() {
       setNavigationPending("cancel");
       setError("");
       const payload = await apiFetch<NavigationState>("/api/navigation/goal/cancel", token, { method: "POST" });
-      setNavigationState(payload);
+      navigationPoll.receive(payload);
     } catch (err) {
       setError(describeError(err));
     } finally {

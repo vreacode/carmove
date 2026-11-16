@@ -78,3 +78,8 @@
 .workspace-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; border-radius: 16px; background: rgb(var(--fl-error-container)); color: rgb(var(--fl-on-error-container)); font-size: 13px; }
 .workspace-error .icon-button { color: inherit; }
 .map-load-error { display: grid; min-height: 220px; align-content: center; justify-items: center; gap: 16px; padding: 24px; color: rgb(var(--fl-error)); font-size: 13px; text-align: center; }
+/* A long capture name must not widen the implicit mobile grid column. */
+.mobile-page { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.mobile-page > * { min-width: 0; max-width: 100%; }
+.mobile-history-list { grid-template-columns: minmax(0, 1fr); }
+.mobile-history-item { min-width: 0; }
