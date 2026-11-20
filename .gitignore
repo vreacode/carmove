@@ -39,6 +39,9 @@ logs/
 *.jpeg
 *.png
 
+# Reviewed frontend previews used by the repository documentation
+!/docs/screenshots/*.png
+
 # Model weights and deployment binaries
 *.pt
 *.onnx

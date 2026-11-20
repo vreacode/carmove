@@ -10,6 +10,33 @@
 - datasets/：垃圾/违停数据集类别定义与本地采集规范；
 - docs/：系统盘点、当前状态、设备调试方法和按产品说明书整理的推进路线。
 
+## 最新前端界面
+
+以下为最新前端源码的浏览器实截预览，使用模拟接口数据；未连接实车或摄像头，视频区域保留无画面状态。截图日期、源码版本与视口见 [截图记录](docs/screenshots/manifest.json)。
+
+**实时监控与车辆操控（浅色）**
+
+![实时监控与车辆操控界面，模拟设备数据](docs/screenshots/desktop-live-light.png)
+
+**算法库**
+
+![算法库列表与详情界面，模拟设备数据](docs/screenshots/desktop-algorithms-light.png)
+
+<details>
+<summary>查看深色主题与手机端界面</summary>
+
+**算法库（深色）**
+
+![深色算法库界面，模拟设备数据](docs/screenshots/desktop-algorithms-dark.png)
+
+**手机端采集**
+
+<img src="docs/screenshots/mobile-capture-light.png" alt="手机端采集界面，模拟设备数据" width="390" />
+
+</details>
+
+前端界面更新后，尽量同步更新以上截图。重建方法见 [截图维护说明](docs/screenshots/README.md)。
+
 ## 当前状态
 
 系统已经有稳定演示版 Dashboard，并开始把室内二维链路和室外三维链路分离：
@@ -26,7 +53,7 @@
 
 ## 安全与仓库边界
 
-首版建议把 GitHub 仓库设为 Private。仓库不会提交 .env、密码/token、模型权重、虚拟环境、录像、截图、rosbag 或构建产物；模型权重和板上运行数据保留在设备本地。
+首版建议把 GitHub 仓库设为 Private。仓库不会提交 .env、密码/token、模型权重、虚拟环境、录像、原始采集截图、rosbag 或构建产物；模型权重和板上运行数据保留在设备本地。经检查的前端文档展示图仅保存在 `docs/screenshots/`，作为上述排除规则的明确例外。
 
 板上实际运行目录仍是 `/home/nvidia/Desktop/wheeltec_ros2/shijue/Nano_Deploy`。本仓库保存可审查的版本化源码；需要联调时，受控的运行修复会同步到板端目录，但板端的 `.env`、模型权重、运行媒体和构建产物不回写到 GitHub。两边发生改动后，应先做差异核对再继续部署。
 

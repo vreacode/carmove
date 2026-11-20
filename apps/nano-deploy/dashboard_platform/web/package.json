@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "screenshots": "node scripts/capture-screenshots.mjs",
     "build": "tsc -b && vite build",
     "test:algorithms": "playwright test algorithm-library",
     "preview": "vite preview",

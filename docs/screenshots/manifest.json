@@ -1,0 +1,21 @@
+{
+  "source_commit": "609ca6b7f4b50b00067f840919b5ebcb96b6663d",
+  "captured_at": "2026-11-20 08:48:19 Asia/Shanghai",
+  "data_source": "Simulated HTTP/WebSocket responses; no robot, camera, map or live measurements.",
+  "browser": "146.0.3856.72",
+  "fonts": "System font fallbacks; remote Google Fonts stylesheet disabled.",
+  "desktop_viewport": [
+    1440,
+    1000
+  ],
+  "mobile_viewport": [
+    390,
+    1280
+  ],
+  "files": [
+    "desktop-live-light.png",
+    "desktop-algorithms-light.png",
+    "desktop-algorithms-dark.png",
+    "mobile-capture-light.png"
+  ]
+}
