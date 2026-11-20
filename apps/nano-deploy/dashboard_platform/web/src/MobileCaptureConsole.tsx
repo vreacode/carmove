@@ -20,6 +20,7 @@ import {
   WifiIcon,
 } from "./components/FlClashIcons";
 import { VideoStream } from "./components/VideoStream";
+import { ThemeSelector } from "./components/ThemeSelector";
 import { DeleteConfirmationDialog } from "./components/DeleteConfirmationDialog";
 import { useDeviceStatus } from "./hooks/useDeviceStatus";
 import { usePolledResource } from "./hooks/usePolledResource";
@@ -239,6 +240,7 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 
   return (
     <main className="mobile-auth">
+      <div className="mobile-auth-appearance"><ThemeSelector /></div>
       <div className="mobile-auth-mark"><CameraIcon /></div>
       <p className="mobile-kicker">CarMove</p>
       <h1>小车控制台</h1>
@@ -637,6 +639,8 @@ export default function MobileCaptureConsole() {
         </div>
       </header>
 
+      <div className="mobile-appearance-row"><ThemeSelector /></div>
+
       <section className="mobile-status-strip">
         <span className={`mobile-status-dot ${online ? "is-good" : "is-bad"}`} />
         <strong>{online ? "小车在线" : "等待小车"}</strong>
@@ -653,10 +657,10 @@ export default function MobileCaptureConsole() {
 
       {tab === "capture" ? (
         <div className="mobile-page mobile-capture-page">
-          <section className="mobile-video-card">
-            <VideoStream mode={streamMode} token={token} useFallback={useFallback} onStateChange={setVideoState} />
+          <section className="mobile-video-card is-live">
+            <VideoStream mode={streamMode} token={token} useFallback={useFallback} onStateChange={setVideoState} presentation="console" />
             <div className="mobile-video-footer">
-              <span className={`mobile-video-state ${videoState === "connected" ? "is-good" : ""}`}><span />{videoState === "connected" ? "实时画面" : "正在连接"}</span>
+              <span className={`mobile-video-state ${videoState === "connected" ? "is-good" : ""}`}><span />{{ connected: "实时画面", idle: "等待连接", connecting: "正在连接", reconnecting: "正在重连", failed: "视频未连接" }[videoState]}</span>
               <button onClick={() => setUseFallback((value) => !value)}>{useFallback ? "切回低延迟" : "备用画面"}</button>
             </div>
           </section>
@@ -773,9 +777,9 @@ export default function MobileCaptureConsole() {
       ) : null}
 
       <nav className="mobile-bottom-nav" aria-label="主导航">
-        <button className={tab === "capture" ? "is-active" : ""} onClick={() => setTab("capture")}><CameraIcon /><span>采集</span></button>
-        <button className={tab === "monitor" ? "is-active" : ""} onClick={() => setTab("monitor")}><ChartBarIcon /><span>监控</span></button>
-        <button className={tab === "archive" ? "is-active" : ""} onClick={() => setTab("archive")}><ArchiveBoxIcon /><span>记录</span></button>
+        <button aria-current={tab === "capture" ? "page" : undefined} className={tab === "capture" ? "is-active" : ""} onClick={() => setTab("capture")}><CameraIcon /><span>采集</span></button>
+        <button aria-current={tab === "monitor" ? "page" : undefined} className={tab === "monitor" ? "is-active" : ""} onClick={() => setTab("monitor")}><ChartBarIcon /><span>监控</span></button>
+        <button aria-current={tab === "archive" ? "page" : undefined} className={tab === "archive" ? "is-active" : ""} onClick={() => setTab("archive")}><ArchiveBoxIcon /><span>记录</span></button>
       </nav>
       {groupToDelete ? <DeleteConfirmationDialog title="删除采集记录" name={groupToDelete.scene} description={`将删除这组采集图片和记录（${groupToDelete.frames_saved} 张），删除后无法恢复。`} fallbackFocus={galleryHeadingRef} onConfirm={() => deleteGallery(groupToDelete.group)} onClose={() => setGroupToDelete(null)} /> : null}
     </main>

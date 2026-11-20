@@ -22,16 +22,27 @@
 
 ![算法库列表与详情界面，模拟设备数据](docs/screenshots/desktop-algorithms-light.png)
 
+**手机端（采集 / 监控）**
+
+<table>
+<tr>
+<td valign="top"><img src="docs/screenshots/mobile-capture-light.png" alt="手机端采集界面，模拟设备数据" width="330" /></td>
+<td valign="top"><img src="docs/screenshots/mobile-monitor-light.png" alt="手机端监控界面，模拟设备数据" width="330" /></td>
+</tr>
+</table>
+
 <details>
-<summary>查看深色主题与手机端界面</summary>
+<summary>查看深色主题、手机记录与登录界面</summary>
 
 **算法库（深色）**
 
 ![深色算法库界面，模拟设备数据](docs/screenshots/desktop-algorithms-dark.png)
 
-**手机端采集**
+**手机端（深色采集 / 采集记录 / 登录）**
 
-<img src="docs/screenshots/mobile-capture-light.png" alt="手机端采集界面，模拟设备数据" width="390" />
+<img src="docs/screenshots/mobile-capture-dark.png" alt="手机端深色采集界面，模拟设备数据" width="300" />
+<img src="docs/screenshots/mobile-archive-light.png" alt="手机端记录界面，模拟设备数据" width="300" />
+<img src="docs/screenshots/mobile-login-light.png" alt="手机端登录界面" width="300" />
 
 </details>
 

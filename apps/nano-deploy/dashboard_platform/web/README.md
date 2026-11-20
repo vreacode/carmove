@@ -2,6 +2,8 @@
 
 React + TypeScript + Vite 无人车操作平台，包含实时视频与操控、建图导航、录像记录、算法库和设备诊断。窄屏自动使用手机采集与监控页面。
 
+手机端沿用电脑端的 FlClash 配色、圆角表面与字体层级，采集、监控、记录、登录页均可选择跟随系统、浅色或深色。两端共用外观选择和视频展示组件；手机视频失败显示明确的重试入口，不显示损坏图片。底部导航与监控急停留有独立的内容安全区。手机样式集中在 `src/mobile.css`。
+
 当前主题沿用 FlClash 默认 `#007AFF` 种子色及 vivid 颜色规则，支持浅色、深色和跟随系统；主要图标及资源曲线也按上游定义适配。
 
 ## 本地开发
@@ -21,7 +23,7 @@ npx playwright install chromium
 npx playwright test
 ```
 
-构建结果在 `dist/`。56 项浏览器测试使用模拟 HTTP 与 WebSocket，验证登录、删除确认、模型选择、设置弹窗、状态乱序、刷新超时恢复、记录翻页、图片切换、控制请求契约、真实数据采样逻辑、主题颜色与键盘操作，不操作实车。
+构建结果在 `dist/`。59 项浏览器测试使用模拟 HTTP 与 WebSocket，验证登录、删除确认、模型选择、设置弹窗、状态乱序、刷新超时恢复、记录翻页、图片切换、控制请求契约、真实数据采样逻辑、主题颜色与键盘操作，以及手机主题记忆、视频失败与重试、窄屏导航和急停安全区，不操作实车。
 
 如需重新生成默认主题：
 
@@ -32,6 +34,8 @@ npm run generate:theme
 ## 维护位置
 
 - `src/components/LiveWorkspace.tsx`：视频、模型与车辆操控界面。
+- `src/components/ThemeSelector.tsx`：电脑端与手机端共用的外观偏好和系统主题跟随。
+- `src/mobile.css`：手机卡片、表单、登录、视频与固定导航的适配。
 - `src/components/AlgorithmLibrary.tsx`、`src/algorithms.ts`：算法目录、说明和运行入口。
 - `src/components/ModelSettingsDialog.tsx`、`SegmentedControl.tsx`：设置编辑和分段选择。
 - `src/components/DeleteConfirmationDialog.tsx`：默认取消、执行防重和失败重试的删除确认。

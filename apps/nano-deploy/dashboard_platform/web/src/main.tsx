@@ -8,6 +8,7 @@ import "./live.css";
 import "./refinement.css";
 import "./flclash-theme.css";
 import "./flclash-surfaces.css";
+import "./mobile.css";
 
 function Root() {
   const [isMobile, setIsMobile] = React.useState(() => window.matchMedia("(max-width: 760px)").matches);

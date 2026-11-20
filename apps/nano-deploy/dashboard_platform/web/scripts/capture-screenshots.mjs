@@ -18,6 +18,7 @@ let browser;
 const errors = [];
 const unexpectedRequests = [];
 const files = [];
+const captures = [];
 const status = {
   agent_online: true, board_online: true, board_name: '界面预览（模拟设备）',
   current_model: 'helmet', current_video_source: '',
@@ -84,16 +85,25 @@ try {
   });
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
-  async function capture(name, hash, selector) {
+  async function capture(name, hash, selector, tab, navigate = true) {
     console.log(`Rendering ${name}`);
-    await page.goto(`${origin}#${hash}`);
+    if (page.viewportSize().width <= 760) await page.setViewportSize({ width: 390, height: 844 });
+    if (navigate) await page.goto(`${origin}#${hash}`);
+    if (tab) await page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: tab, exact: true }).click();
     await page.locator(selector).waitFor({ state: 'visible' });
     await page.evaluate(() => document.fonts.ready);
     // Allow theme transitions and video fallback retries to settle.
     await page.waitForTimeout(2200);
+    // A full-height viewport keeps fixed navigation at the bottom of the
+    // documentation image rather than across the middle of a long page.
+    if (page.viewportSize().width <= 760) {
+      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      await page.setViewportSize({ width: 390, height });
+    }
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: horizontal overflow`);
     await page.screenshot({ path: fileURLToPath(new URL(name, output)), fullPage: true, animations: 'disabled', timeout: 15000 });
     files.push(name);
+    captures.push({ file: name, viewport: page.viewportSize() });
     console.log(`Saved ${name}`);
   }
   await capture('desktop-live-light.png', 'live', '.dashboard-workspace');
@@ -103,6 +113,13 @@ try {
   await page.getByRole('combobox', { name: '外观', exact: true }).selectOption('light');
   await page.setViewportSize({ width: 390, height: 1280 });
   await capture('mobile-capture-light.png', 'live', '.mobile-app');
+  await capture('mobile-monitor-light.png', 'live', '.mobile-monitor-page', '监控');
+  await capture('mobile-archive-light.png', 'live', '.mobile-archive-page', '记录');
+  await page.getByRole('combobox', { name: '外观', exact: true }).selectOption('dark');
+  await capture('mobile-capture-dark.png', 'live', '.mobile-capture-page', '采集');
+  await page.getByRole('combobox', { name: '外观', exact: true }).selectOption('light');
+  await page.getByRole('button', { name: '退出', exact: true }).click();
+  await capture('mobile-login-light.png', 'live', '.mobile-auth', undefined, false);
   assert.deepEqual(errors, [], 'Browser page errors');
   assert.deepEqual(unexpectedRequests, [], 'Unexpected external or device mutation requests');
   const source = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -112,7 +129,7 @@ try {
     data_source: 'Simulated HTTP/WebSocket responses; no robot, camera, map or live measurements.',
     browser: browser.version(),
     fonts: 'System font fallbacks; remote Google Fonts stylesheet disabled.',
-    desktop_viewport: [1440, 1000], mobile_viewport: [390, 1280], files,
+    desktop_viewport: [1440, 1000], mobile_width: 390, captures, files,
   }, null, 2) + '\n');
   console.log(`Captured ${files.length} frontend previews; no page errors, horizontal overflow or device mutations.`);
 } catch (error) {

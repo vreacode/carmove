@@ -12,6 +12,7 @@ import {
   XMarkIcon,
 } from "./components/FlClashIcons";
 import { Panel } from "./components/Panel";
+import { ThemeSelector } from "./components/ThemeSelector";
 import { DeleteConfirmationDialog } from "./components/DeleteConfirmationDialog";
 import { pgmArrayBufferToDataUrl } from "./mapImage";
 import { AlgorithmLibrary } from "./components/AlgorithmLibrary";
@@ -996,7 +997,7 @@ function App() {
       <DataMotionProvider revision={`${activeTab}:${navigationRevision}`}>
       <div className="workspace-topbar">
         <div className="workspace-breadcrumb"><span>工作空间</span><ChevronRightIcon aria-hidden="true" /><strong>{activeWorkspace.title}</strong></div>
-        <div className="workspace-utilities"><ThemeToggle /><span className="utility-divider" /><button onClick={logout} className="workspace-logout">退出登录</button></div>
+        <div className="workspace-utilities"><ThemeSelector /><span className="utility-divider" /><button onClick={logout} className="workspace-logout">退出登录</button></div>
       </div>
       <div className="workspace-content">
       <header className="workspace-heading">
@@ -1687,32 +1688,6 @@ function StatCard({ label, value, animate = false }: { label: string; value: str
       <p className="mt-1 truncate text-base font-semibold text-primary">{animate ? <AnimatedNumber value={Number(value)} /> : value}</p>
     </div>
   );
-}
-
-const THEMES = [
-  { id: "system", label: "跟随系统" },
-  { id: "light", label: "浅色" },
-  { id: "dark", label: "深色" },
-] as const;
-
-function ThemeToggle() {
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem("app-theme");
-    return saved === "dark" || saved === "light" || saved === "system" ? saved : "system";
-  });
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => document.documentElement.setAttribute("data-theme", theme === "system" ? (query.matches ? "dark" : "light") : theme);
-    apply();
-    localStorage.setItem("app-theme", theme);
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, [theme]);
-  return <label className="theme-selector"><span>外观</span>
-    <select aria-label="外观" value={theme} onChange={(event) => setTheme(event.target.value)}>
-      {THEMES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-    </select>
-  </label>;
 }
 
 export default App;
