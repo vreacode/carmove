@@ -12,8 +12,8 @@
 - [x] 提取 `src/components/ThemeSelector.tsx`，桌面与手机共用；手机登录、已登录页添加入口。手机 VideoStream 设置 `presentation="console"`，底部状态文案对应失败状态。
 - [x] 新增 `src/mobile.css` 并在 main.tsx 最后加载：使用现有 tokens，统一卡片、字体、表单、状态、登录与底部导航；保留原有数据和操作绑定。
 - [x] 运行 `npm run build` 和完整 Playwright 回归，修复由本次变动引起的问题。用本地 Edge 浏览器配置运行，不新增运行时依赖。
-- [ ] 扩展 `scripts/capture-screenshots.mjs` 覆盖手机采集、监控、记录、登录与深色，人工检查图片。更新前端说明与 README 引用。
-- [ ] 提交前端代码后重建截图，检查来源和引用，再提交展示图；推送并核实远端提交。
+- [x] 扩展 `scripts/capture-screenshots.mjs` 覆盖手机采集、监控、记录、登录与深色，人工检查图片。更新前端说明与 README 引用。
+- [x] 提交前端代码后重建截图，检查来源和引用，再提交展示图；推送并核实远端提交。
 
 ## 验收命令
 

@@ -7,6 +7,7 @@
 - 04-device-operations.md：去除密码后的设备调试与常用命令。
 - 08-data-pipeline.md：采集、4K 母片、场景分组、YOLO 标注和数据集校验。
 - 09-yolo-training.md：YOLOv5 基线训练、Jetson 推理验收和实验记录模板。
+- 19-mobile-interface.md：手机端与电脑端视觉统一、主题、响应式布局及本地验证范围。
 - `bash tools/run_unit_tests.sh`：运行云台协议、事件规则和数据工具的无硬件测试。
 - reference/智能网联汽车整车技术科创系统(1).docx：项目原始技术说明书。
 
